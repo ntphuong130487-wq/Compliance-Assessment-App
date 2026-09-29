@@ -1,9 +1,13 @@
 {
-  "name":"agris-compliance-assessment",
-  "version":"0.2.0",
+  "name":"agris-compliance-assessment-app",
+  "version":"1.0.0-rc.2",
   "private":true,
   "type":"module",
   "engines":{"node":">=22"},
   "dependencies":{"@neondatabase/serverless":"^1.0.2"},
-  "scripts":{"test":"node tests/qa.mjs"}
+  "scripts":{
+    "build":"node build.mjs",
+    "test":"node tests/qa.mjs",
+    "qa":"npm run build && npm test"
+  }
 }
