@@ -7,8 +7,10 @@ function db() {
   return neon(process.env.DATABASE_URL);
 }
 
-function authReady() {
-  return Boolean(process.env.AUTH_MODE);
+function authEnforcementReady() {
+  // Production shared-state access must remain locked until the backend can
+  // verify an end-user identity and its server-side scope on every request.
+  return false;
 }
 
 async function ensure(sql) {
@@ -35,21 +37,28 @@ export default async function handler(req, res) {
     });
   }
 
+  if (!process.env.AUTH_MODE) {
+    return res.status(403).json({
+      ok: false,
+      configured: true,
+      mode: "blocked-until-auth",
+      error: "AUTH_REQUIRED",
+      message: "Shared compliance data is disabled until server-side authentication is configured."
+    });
+  }
+
+  if (!authEnforcementReady()) {
+    return res.status(501).json({
+      ok: false,
+      configured: true,
+      mode: "auth-enforcement-pending",
+      error: "AUTH_ENFORCEMENT_PENDING",
+      message: "Shared compliance data remains locked until identity and scope are verified server-side."
+    });
+  }
+
   try {
     await ensure(sql);
-
-    if (!authReady()) {
-      if (req.method === "GET") {
-        return res.status(200).json({
-          ok: true,
-          configured: true,
-          authRequired: true,
-          mode: "secure-local",
-          message: "Database exists but identity provider is not configured."
-        });
-      }
-      return res.status(403).json({ ok: false, configured: true, error: "AUTH_REQUIRED" });
-    }
 
     if (req.method === "GET") {
       const rows = await sql`

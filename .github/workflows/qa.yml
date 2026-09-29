@@ -1,8 +1,9 @@
-name: Compliance MVP QA
+name: Compliance Production QA
 on:
   push:
-    branches: [main]
+    branches: [main, production-v1-integrated]
   pull_request:
+
 jobs:
   qa:
     runs-on: ubuntu-latest
@@ -11,14 +12,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run static QA
-        run: node tests/qa.mjs
+
+      - name: Build and domain QA
+        run: npm run qa
+
       - name: Run RBAC policy QA
         run: node tests/access-control.mjs
-      - name: Check application syntax
+
+      - name: Check application and serverless syntax
         run: |
           node --check access-control.js
           node --check api/state.js
           node --check api/health.js
           node --check api/access.js
           node --check api/evidence.js
+          node --check dist/app.js
+          node --check dist/domain.js
+          node --check dist/store.js
