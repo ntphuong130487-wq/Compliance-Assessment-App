@@ -36,7 +36,9 @@ const checks=[
   ["global search",html.includes("globalSearch")&&html.includes("Tìm kiếm toàn hệ thống")&&html.includes("Tìm toàn hệ thống")],
   ["report exports",html.includes("exportCSV")&&html.includes("exportJSON")&&html.includes("printManagementReport")],
   ["production readiness UI",html.includes("/api/readiness")&&html.includes("Mức sẵn sàng Production")],
-  ["Entra UI integration",html.includes("/api/auth/login")&&html.includes("/api/auth/me")&&html.includes("Đăng nhập Microsoft")]
+  ["Entra UI integration",html.includes("/api/auth/login")&&html.includes("/api/auth/me")&&html.includes("Đăng nhập Microsoft")],
+  ["admin operations settings",html.includes("Cấu hình vận hành")&&html.includes("saveNotifySettings")&&html.includes("reminderBeforeDueDays")],
+  ["page filters",html.includes("assessmentStatusFilter")&&html.includes("findingSeverityFilter")&&html.includes("actionOwnerFilter")]
 ];
 const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
 if(!scripts.length) throw new Error("Không tìm thấy script");
