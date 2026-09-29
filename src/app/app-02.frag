@@ -1,5 +1,3 @@
- năng Export/Import dùng để sao lưu trong giai đoạn này.</div>`;
-}
 function shell(title,body){
   return `<div class="app">
     <aside class="side">
@@ -8,7 +6,7 @@ function shell(title,body){
       <div class="sideFoot"><label>Vai trò đang mô phỏng</label><select id="roleSel">${ROLES.map(r=>`<option ${r===currentRole?'selected':''}>${r}</option>`).join('')}</select><div class="tiny" style="margin-top:7px;opacity:.7">RBAC mô phỏng để kiểm thử UX; chưa thay thế SSO.</div></div>
     </aside>
     <main class="main">
-      <header class="top"><div><h1>${esc(title)}</h1><div class="tiny muted">Role: ${esc(currentRole)} · ${backend.databaseConfigured?'DB configured':'Browser persistence'}</div></div>
+      <header class="top"><div><h1>${esc(title)}</h1><div class="tiny muted">Role: ${esc(currentRole)} · ${sync.configured&&sync.mode==='cloud'?'Cloud sync':backend.databaseConfigured?'DB configured · '+sync.mode:'Browser persistence'}</div></div>
         <div class="row"><button class="btn alt" data-act="qa">QA Check</button><button class="btn alt" data-act="export">Export</button><button class="btn alt" data-act="import">Import</button></div>
       </header>
       <div class="mobile">${navHtml()}</div>
