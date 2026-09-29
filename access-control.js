@@ -1,6 +1,7 @@
 (function(g){
   "use strict";
   var STORAGE_KEY="agris_compliance_persona_v03";
+  var runtimeUser=null;
   var roles={
     compliance_admin:{
       label:"Quản trị Tuân thủ",
@@ -41,10 +42,12 @@
     {id:"p_viewer",label:"Mô phỏng · Chỉ xem",role:"viewer",orgIds:["*"]}
   ];
   function current(){
+    if(runtimeUser)return{id:runtimeUser.id||"runtime",label:runtimeUser.name||runtimeUser.email||"Người dùng",role:runtimeUser.role||"viewer",orgIds:Array.isArray(runtimeUser.orgIds)?runtimeUser.orgIds:[]};
     var id;
     try{id=localStorage.getItem(STORAGE_KEY)}catch(e){}
     return personas.find(function(p){return p.id===id})||personas[0];
   }
+  function setRuntimeUser(user){runtimeUser=user||null}
   function setPersona(id){
     if(!personas.some(function(p){return p.id===id}))return false;
     try{localStorage.setItem(STORAGE_KEY,id)}catch(e){}
@@ -73,5 +76,5 @@
     };
     return can(map[view]||"view_dashboard");
   }
-  g.ComplianceAccess={roles:roles,personas:personas,current:current,setPersona:setPersona,can:can,viewAllowed:viewAllowed};
+  g.ComplianceAccess={roles:roles,personas:personas,current:current,setPersona:setPersona,setRuntimeUser:setRuntimeUser,can:can,viewAllowed:viewAllowed};
 })(window);
