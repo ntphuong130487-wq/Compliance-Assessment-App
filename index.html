@@ -16,7 +16,7 @@
 <script>
 (function(){
 var KEY="agris_compliance_mvp01";
-var tabs=[["dashboard","Điều hành"],["frameworks","Nguồn & Khung tuân thủ"],["assessments","Chương trình đánh giá"],["fieldwork","Kiểm tra hiện trường"],["findings","Phát hiện"],["actions","Khắc phục"],["reports","Báo cáo"]];
+var tabs=[["dashboard","Điều hành"],["frameworks","Nguồn & Khung tuân thủ"],["assessments","Chương trình đánh giá"],["fieldwork","Kiểm tra hiện trường"],["findings","Phát hiện"],["actions","Khắc phục"],["reports","Báo cáo"],["settings","Cấu hình"]];
 var view="dashboard",selectedAssessment=null,selectedRA=null,sourceMode="file",draftSourceFilter="all",draftStatusFilter="all",draftTypeFilter="all",draftQuery="",runtimeReadiness=null,currentUser=null;
 function id(p){return p+"_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7)}
 function now(){return new Date().toISOString()}
@@ -77,6 +77,7 @@ function isoDay(d){var x=d?new Date(d):new Date();return new Date(x.getFullYear(
 function daysFrom(date){if(!date)return null;return Math.floor((isoDay()-isoDay(date))/86400000)}
 function daysUntil(date){if(!date)return null;return Math.ceil((isoDay(date)-isoDay())/86400000)}
 function notificationCandidates(){
+  var ns=S.notificationSettings||{};if(ns.inApp===false)return[];
   var out=[],visibleF=visibleFindings(),visibleA=visibleActions();
   visibleF.forEach(function(f){
     if(f.status==="pending_unit_response")out.push({id:"f_resp_"+f.id,level:"warning",type:"Phát hiện",title:"Chờ đơn vị phản hồi",text:f.title,target:"findings",objectId:f.id});
@@ -85,7 +86,8 @@ function notificationCandidates(){
   });
   visibleA.forEach(function(a){
     var d=daysUntil(a.due);
-    if(a.status!=="closed"&&d!==null&&d<0)out.push({id:"a_over_"+a.id,level:"critical",type:"Chuyển cấp",title:"Hành động quá hạn "+Math.abs(d)+" ngày",text:a.text,target:"actions",objectId:a.id});
+    if(ns.overdueEscalation!==false&&a.status!=="closed"&&d!==null&&d<0)out.push({id:"a_over_"+a.id,level:"critical",type:"Chuyển cấp",title:"Hành động quá hạn "+Math.abs(d)+" ngày",text:a.text,target:"actions",objectId:a.id});
+    var rd=Number(ns.reminderBeforeDueDays);if(a.status!=="closed"&&d!==null&&ns.reminderBeforeDueDays!==""&&ns.reminderBeforeDueDays!=null&&!Number.isNaN(rd)&&d>=0&&d<=rd)out.push({id:"a_due_"+a.id+"_"+rd,level:"info",type:"Nhắc việc",title:"Hành động sắp đến hạn trong "+d+" ngày",text:a.text,target:"actions",objectId:a.id});
     if(a.status==="submitted_for_verification")out.push({id:"a_verify_"+a.id,level:"warning",type:"Hành động",title:"Chờ xác minh",text:a.text,target:"actions",objectId:a.id});
     if(a.status==="reopened")out.push({id:"a_reopen_"+a.id,level:"warning",type:"Hành động",title:"Xác minh chưa đạt – cần xử lý lại",text:a.text,target:"actions",objectId:a.id});
   });
@@ -352,6 +354,14 @@ function reports(){
     '<div class="card" style="margin-top:14px"><h2>Nhật ký quyết định</h2>'+S.logs.slice().reverse().slice(0,100).map(function(x){return'<div class="small" style="padding:8px 0;border-bottom:1px solid var(--line)"><b>'+esc(x.type)+'</b> · '+esc(x.object)+'<div class="muted">'+new Date(x.at).toLocaleString("vi-VN")+' · '+esc(x.note||"")+'</div></div>'}).join("")+'</div>'
   )
 }
+function settings(){
+  var r=runtimeReadiness||{},ns=S.notificationSettings||{};
+  return shell("Cấu hình vận hành",
+    '<div class="split"><div class="card"><h2>Thông báo & chuyển cấp</h2><div class="field"><label><input type="checkbox" id="setInApp" '+(ns.inApp!==false?"checked":"")+'> Bật thông báo trong ứng dụng</label></div><div class="field"><label><input type="checkbox" id="setOverdue" '+(ns.overdueEscalation!==false?"checked":"")+'> Chuyển cấp ngay khi hành động quá hạn</label></div><div class="field"><label>Nhắc trước hạn hành động (ngày)</label><input type="number" min="0" id="setReminderDays" value="'+esc(ns.reminderBeforeDueDays==null?"":ns.reminderBeforeDueDays)+'" placeholder="Để trống = không nhắc trước hạn"></div><button class="btn" data-act="saveNotifySettings">Lưu cấu hình</button><p class="small muted">Ngưỡng nhắc trước hạn chỉ có hiệu lực khi được người quản trị nhập; hệ thống không tự giả định.</p></div>'+
+    '<div class="card"><h2>Sẵn sàng Production</h2><div class="readiness"><div class="ready-cell"><b>Microsoft SSO</b><div class="small">'+(r.auth&&r.auth.configured?"Đã cấu hình":"Chưa cấu hình")+'</div></div><div class="ready-cell"><b>Database</b><div class="small">'+(r.database&&r.database.configured?"Đã kết nối":"Chưa kết nối")+'</div></div><div class="ready-cell"><b>Lưu file riêng tư</b><div class="small">'+(r.storage&&r.storage.configured?"Đã cấu hình":"Chưa cấu hình")+'</div></div><div class="ready-cell"><b>Schema chuẩn hóa</b><div class="small">'+(r.database&&r.database.normalizedReady?"Sẵn sàng":"Chưa migrate")+'</div></div></div><button class="btn alt" style="margin-top:12px" data-act="refreshReadiness">Kiểm tra lại</button></div></div>'+
+    '<div class="card" style="margin-top:14px"><h2>Nguyên tắc chuyển sang production</h2><ol class="small"><li>Chỉ bật shared database khi SSO đã xác minh danh tính.</li><li>Chỉ lưu bằng chứng thật khi private storage đã cấu hình.</li><li>Phân quyền backend theo người dùng + phạm vi đơn vị, không dựa vào UI.</li><li>Chuyển JSON state sang các bảng chuẩn hóa trước khi coi là production hoàn chỉnh.</li></ol></div>'
+  )
+}
 function modal(body){document.body.insertAdjacentHTML("beforeend",'<div class="modalbg" id="mb"><div class="modal">'+body+'<div class="row" style="margin-top:14px"><button class="btn alt right" data-act="close">Đóng</button></div></div></div>');bind()}
 function qa(){var e=[];S.ra.forEach(function(r){if(!S.assessments.some(function(a){return a.id===r.assessmentId}))e.push("Bản ghi đánh giá yêu cầu thiếu Cuộc đánh giá");if(!S.requirements.some(function(q){return q.id===r.requirementId}))e.push("Bản ghi đánh giá yêu cầu thiếu Yêu cầu tuân thủ")});S.revisions.forEach(function(r){if(!S.evidence.some(function(e){return e.id===r.evidenceId}))e.push("Phiên bản bằng chứng thiếu Bằng chứng gốc")});S.findings.forEach(function(f){if(!S.ra.some(function(r){return r.id===f.raId}))e.push("Phát hiện thiếu bản ghi đánh giá Yêu cầu tuân thủ")});modal("<h3>QA Check</h3>"+(e.length?'<div class="fail">FAIL · '+e.length+" lỗi</div><ul>"+e.map(function(x){return"<li>"+esc(x)+"</li>"}).join("")+"</ul>":'<div class="pass">PASS · Không phát hiện lỗi toàn vẹn dữ liệu lõi.</div><p class="small muted">Đã kiểm tra liên kết Cuộc đánh giá – Yêu cầu tuân thủ, Bằng chứng – Phiên bản và Phát hiện – Kết quả đánh giá.</p>'))}
 function newfw(){modal('<h3>Tạo khung tuân thủ thủ công</h3><form id="f"><div class="field"><label>Tên khung</label><input name="name" required></div><div class="field"><label>Mã</label><input name="code"></div><div class="field"><label>Cơ sở/diễn giải nội bộ</label><textarea name="basis" required placeholder="Nêu nguồn hoặc cơ sở hình thành các yêu cầu thủ công"></textarea></div><div class="field"><label>Các điểm phải tuân thủ</label><textarea name="req" placeholder="Mỗi dòng là một yêu cầu" required></textarea></div><button class="btn">Tạo & gửi duyệt</button></form>');document.getElementById("f").onsubmit=function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),fid=id("fw"),sid=id("src"),src={id:sid,title:"Manual/Internal Interpretation · "+d.name,sourceType:"Manual/Internal Interpretation",inputMode:"manual",status:"pending_approval",createdAt:now(),excerpt:d.basis};S.sources.unshift(src);var rr=d.req.split("\n").map(function(x){return x.trim()}).filter(Boolean).map(function(t,i){return{id:id("r"),frameworkId:fid,code:(d.code||"FW")+"-"+String(i+1).padStart(2,"0"),title:t,description:d.basis,assessable:true,test:"Cần xác định",expected:"Cần xác định",sourceId:sid,status:"pending_approval"}});S.requirements=S.requirements.concat(rr);S.frameworks.push({id:fid,code:d.code||fid,name:d.name,version:"0.1",status:"pending_approval",reqIds:rr.map(function(x){return x.id})});save();document.getElementById("mb").remove();render()}}
@@ -423,6 +433,8 @@ function bind(){
     if(x==="readAll")markAllNotificationsRead();
     if(x==="exportJson")exportJSON();
     if(x==="printReport")printManagementReport();
+    if(x==="saveNotifySettings"){var rd=document.getElementById("setReminderDays");S.notificationSettings={inApp:document.getElementById("setInApp").checked,overdueEscalation:document.getElementById("setOverdue").checked,reminderBeforeDueDays:rd&&rd.value!==""?Number(rd.value):""};save();render()}
+    if(x==="refreshReadiness")loadRuntimeReadiness();
     if(x==="close")document.getElementById("mb").remove();
     if(x==="newfw"&&guard("manage_framework"))newfw();
     if(x==="sourceFile")addFileSource();
@@ -455,7 +467,7 @@ function bind(){
   var s=document.getElementById("asSel");if(s)s.onchange=function(){selectedAssessment=s.value;selectedRA=null;render()};
   var ps=document.getElementById("personaSel");if(ps)ps.onchange=function(){ComplianceAccess.setPersona(ps.value);if(!ComplianceAccess.viewAllowed(view))view="dashboard";render()};
 }
-function render(){if(!ComplianceAccess.viewAllowed(view))view="dashboard";var f={dashboard:dashboard,frameworks:frameworks,assessments:assessments,fieldwork:fieldwork,findings:findings,actions:actions,reports:reports}[view]||dashboard;document.getElementById("root").innerHTML=f();bind()}
+function render(){if(!ComplianceAccess.viewAllowed(view))view="dashboard";var f={dashboard:dashboard,frameworks:frameworks,assessments:assessments,fieldwork:fieldwork,findings:findings,actions:actions,reports:reports,settings:settings}[view]||dashboard;document.getElementById("root").innerHTML=f();bind()}
 render();
 pullRemote();
 loadRuntimeReadiness();
