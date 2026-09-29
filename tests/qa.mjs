@@ -17,7 +17,13 @@ const checks=[
   ["AgriS branding",html.includes("data:image/png;base64")&&html.includes("--green-dark")&&html.includes("Nguồn & Khung tuân thủ")],
   ["source intake modes",html.includes("Upload file")&&html.includes("Nhập / dán text")&&html.includes("Tìm quy định nhà nước")],
   ["draft obligation review",html.includes("Rà soát nghĩa vụ dự thảo")&&html.includes("data-draft-accept")&&html.includes("publishDrafts")],
-  ["source traceability",html.includes("sourceClause")&&html.includes("sourceId")&&html.includes("Nguồn/Điều khoản")]
+  ["source traceability",html.includes("sourceClause")&&html.includes("sourceId")&&html.includes("Nguồn/Điều khoản")],
+  ["auto assessment scope",html.includes("applicableRequirements")&&html.includes("Quy trình")&&html.includes("Hoạt động")&&html.includes("Địa điểm")],
+  ["draft-final finding workflow",html.includes("pending_unit_response")&&html.includes("pending_final_review")&&html.includes("finalizeFinding")],
+  ["one-level requirement approval",html.includes("approveRequirement")&&html.includes("pending_approval")&&html.includes("approve_framework")],
+  ["independent verification",html.includes("Không được tự xác minh")&&html.includes("ownerPersonaId")],
+  ["scoped reporting",html.includes("var scopedRA=visibleRA()")],
+  ["reset demo removed",!html.includes(">Reset demo</button>")]
 ];
 const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
 if(!scripts.length) throw new Error("Không tìm thấy script");
