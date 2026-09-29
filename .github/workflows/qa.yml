@@ -13,3 +13,7 @@ jobs:
           node-version: 22
       - name: Run static QA
         run: node tests/qa.mjs
+      - name: Check serverless API syntax
+        run: |
+          node --check api/state.js
+          node --check api/health.js
