@@ -11,6 +11,9 @@ const css=fs.readFileSync(new URL('../dist/styles.css',import.meta.url),'utf8');
 const store=fs.readFileSync(new URL('../dist/store.js',import.meta.url),'utf8');
 const schema=fs.readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8');
 const stateApi=fs.readFileSync(new URL('../api/state.js',import.meta.url),'utf8');
+const evidenceApi=fs.readFileSync(new URL('../api/evidence.js',import.meta.url),'utf8');
+const accessApi=fs.readFileSync(new URL('../api/access.js',import.meta.url),'utf8');
+const healthApi=fs.readFileSync(new URL('../api/health.js',import.meta.url),'utf8');
 const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
 
 const checks=[];
@@ -38,6 +41,21 @@ check('Optimistic conflict control',()=>{
 check('Safe local fallback',()=>{
   assert.ok(store.includes('localStorage'));
   assert.ok(app.includes('Offline fallback'));
+});
+check('Shared state is secure-by-default',()=>{
+  assert.ok(stateApi.includes('AUTH_REQUIRED'));
+  assert.ok(stateApi.includes('AUTH_ENFORCEMENT_PENDING'));
+  assert.ok(stateApi.includes('authEnforcementReady'));
+});
+check('Private evidence is secure-by-default',()=>{
+  assert.ok(evidenceApi.includes('@vercel/blob'));
+  assert.ok(evidenceApi.includes('AUTH_ENFORCEMENT_PENDING'));
+  assert.ok(pkg.dependencies?.['@vercel/blob']);
+});
+check('Access-control readiness contract',()=>{
+  assert.ok(accessApi.includes('authentication-provider-pending'));
+  assert.ok(healthApi.includes('sharedStateReady: false'));
+  assert.ok(healthApi.includes('evidenceUploadReady: false'));
 });
 check('22-object schema families',()=>{
   for(const table of ['org_units','actors','compliance_sources','compliance_frameworks','compliance_requirements','control_references','existing_controls','assessment_programs','compliance_assessments','assessment_scopes','assessment_assignments','requirement_assessments','findings','remediation_actions','verifications','compliance_exceptions','unit_responses','evidence','evidence_revisions','evidence_links','ai_analysis_proposals','decision_logs']) assert.ok(schema.includes(`CREATE TABLE IF NOT EXISTS ${table}`),table);
