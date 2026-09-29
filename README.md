@@ -1,13 +1,27 @@
 # AgriS Compliance Assessment App
 
-Ứng dụng phục vụ lập kế hoạch, thực hiện, rà soát và theo dõi khắc phục đối với hoạt động kiểm tra/đánh giá tuân thủ.
+Production Candidate for end-to-end compliance assessment operations.
 
-## Baseline kiến trúc
+**Business flow:** Compliance Source → Framework → Requirement → Assessment → Fieldwork/Evidence → Human-confirmed Finding → Unit Response → Remediation Action → Verification → Close → Dashboard.
 
-- **Domain Model v0.1** — 22 object lõi, phân loại Master / Transaction / Evidence / Governance.
-- Nguyên tắc: Khung tuân thủ → Yêu cầu tuân thủ → Chương trình đánh giá → Bằng chứng → Kết quả → Phát hiện → Hành động → Xác minh → Đóng.
-- AI chỉ **đề xuất** nhận định/finding; kết quả chính thức phải được con người xác nhận.
-- Không có mô tả giới hạn phạm vi thì mặc định toàn bộ yêu cầu có thể đánh giá trong khung thuộc phạm vi.
-- Bằng chứng được quản lý theo phiên bản; không ghi đè lịch sử.
+## Run locally
+Open `index.html` through a static web server. Example:
 
-Chi tiết: [docs/domain-model-v0.1.md](docs/domain-model-v0.1.md)
+```bash
+python -m http.server 3000
+```
+
+## QA
+
+```bash
+npm test
+```
+
+## Architecture
+- `domain.js`: domain rules and invariants.
+- `store.js`: browser persistence / import-export adapter.
+- `app.js`: UI and workflow orchestration.
+- `db/schema.sql`: normalized PostgreSQL/Neon schema for the 22 domain objects.
+- `api/health.js`: Vercel runtime health/config endpoint.
+
+See `docs/PRODUCTION-v1.md` and `docs/domain-model-v0.1.md`.

@@ -1,0 +1,8 @@
+{
+  "name":"agris-compliance-assessment-app",
+  "version":"1.0.0-rc.1",
+  "private":true,
+  "type":"module",
+  "scripts":{"build":"node build.mjs","test":"node tests/qa.mjs","qa":"npm run build && npm test"},
+  "engines":{"node":">=20"}
+}
