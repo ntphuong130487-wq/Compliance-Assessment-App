@@ -2,8 +2,8 @@ import fs from "node:fs";
 const html=fs.readFileSync("index.html","utf8");
 const checks=[
   ["7 màn hình",["Điều hành","Khung tuân thủ","Chương trình đánh giá","Kiểm tra hiện trường","Phát hiện","Khắc phục","Báo cáo"].every(x=>html.includes(x))],
-  ["human-in-the-loop",html.includes("AI chỉ đề xuất")&&html.includes("Xác nhận Finding")],
-  ["full-scope rule",html.includes("Để trống phạm vi requirement = kiểm toàn bộ")||html.includes("Để trống = toàn bộ requirement assessable")],
+  ["human-in-the-loop",html.includes("AI chỉ đề xuất")&&html.includes("Tạo Draft Finding")&&html.includes("Chốt Finding")],
+  ["scope rule",html.includes("applicableRequirements")&&html.includes("Requirement không có applicability cụ thể được hiểu là áp dụng chung")],
   ["evidence revision",html.includes("revisions")&&html.includes("version:1")],
   ["finding-action-verification",html.includes("data-actionfor")&&html.includes("data-verify")],
   ["demo disclaimer",html.includes("không phải số liệu tuân thủ thực tế của AgriS")],
