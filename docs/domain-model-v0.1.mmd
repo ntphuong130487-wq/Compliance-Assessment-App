@@ -1,0 +1,27 @@
+erDiagram
+    OrgUnit ||--o{ OrgUnit : parent_of
+    OrgUnit ||--o{ Actor : contains
+    OrgUnit ||--o{ ExistingControl : operates
+    ComplianceSource ||--o{ ComplianceRequirement : defines
+    ComplianceFramework }o--o{ ComplianceRequirement : contains
+    ComplianceRequirement }o--o{ ControlReference : expected_control
+    ControlReference ||--o{ ExistingControl : instantiated_as
+    AssessmentProgram ||--o{ ComplianceAssessment : contains
+    ComplianceFramework ||--o{ ComplianceAssessment : baseline_for
+    ComplianceAssessment ||--o{ AssessmentScope : scoped_by
+    ComplianceAssessment ||--o{ AssessmentAssignment : staffed_by
+    Actor ||--o{ AssessmentAssignment : assigned
+    ComplianceAssessment ||--o{ RequirementAssessment : comprises
+    ComplianceRequirement ||--o{ RequirementAssessment : assessed_as
+    RequirementAssessment }o--o{ ExistingControl : supported_by
+    RequirementAssessment ||--o{ Finding : produces
+    Finding ||--o{ UnitResponse : receives
+    Finding ||--o{ RemediationAction : remediated_by
+    RemediationAction ||--o{ Verification : verified_by
+    ComplianceRequirement ||--o{ ComplianceException : exception_to
+    ComplianceAssessment ||--o{ ComplianceException : may_include
+    Evidence ||--o{ EvidenceRevision : versioned_as
+    EvidenceRevision ||--o{ EvidenceLink : linked_via
+    EvidenceRevision ||--o{ AIAnalysisProposal : analyzed_by
+    ComplianceAssessment ||--o{ AIAnalysisProposal : contextualizes
+    Actor ||--o{ DecisionLog : decides
