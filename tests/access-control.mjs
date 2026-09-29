@@ -36,4 +36,9 @@ assert(!A.can("confirm_finding",{assessment:{orgId:"agric"}}),"Assessor must not
 A.setPersona("p_reviewer");
 assert(A.can("verify_action"),"Reviewer should verify actions");
 
-console.log("PASS - RBAC role matrix and org scope");
+A.setRuntimeUser({id:"user_real",role:"assessor",orgIds:["proc"],name:"Real User"});
+assert(A.can("conduct_fieldwork",{assessment:{orgId:"proc"}}),"Runtime Clerk user should inherit assigned org scope");
+assert(!A.can("conduct_fieldwork",{assessment:{orgId:"agric"}}),"Runtime Clerk user must be blocked outside assigned org scope");
+A.setRuntimeUser(null);
+
+console.log("PASS - RBAC role matrix and runtime org scope");
