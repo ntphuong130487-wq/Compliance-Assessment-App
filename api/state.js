@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { authConfigured, readSession } from "../lib/auth-session.js";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 
@@ -7,9 +8,6 @@ function db() {
   return neon(process.env.DATABASE_URL);
 }
 
-function authReady() {
-  return Boolean(process.env.AUTH_MODE);
-}
 
 async function ensure(sql) {
   await sql`
@@ -38,17 +36,23 @@ export default async function handler(req, res) {
   try {
     await ensure(sql);
 
-    if (!authReady()) {
+    if (!authConfigured()) {
       if (req.method === "GET") {
         return res.status(200).json({
           ok: true,
           configured: true,
           authRequired: true,
+          authConfigured: false,
           mode: "secure-local",
-          message: "Database exists but identity provider is not configured."
+          message: "Database exists but Microsoft Entra SSO is not configured."
         });
       }
-      return res.status(403).json({ ok: false, configured: true, error: "AUTH_REQUIRED" });
+      return res.status(403).json({ ok: false, configured: true, authRequired: true, error: "AUTH_NOT_CONFIGURED" });
+    }
+
+    const session = await readSession(req);
+    if (!session) {
+      return res.status(401).json({ ok: false, configured: true, authRequired: true, authConfigured: true, error: "AUTH_REQUIRED" });
     }
 
     if (req.method === "GET") {
