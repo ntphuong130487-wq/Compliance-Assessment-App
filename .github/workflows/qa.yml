@@ -40,4 +40,5 @@ jobs:
           node --check api/auth/me.js
           node --check api/auth/logout.js
           node --check api/readiness.js
+          node --check api/notifications/run.js
           node --check scripts/db-check.mjs
