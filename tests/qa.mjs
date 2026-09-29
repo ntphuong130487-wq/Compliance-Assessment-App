@@ -2,8 +2,8 @@ import fs from "node:fs";
 const html=fs.readFileSync("index.html","utf8");
 const checks=[
   ["7 màn hình",["Điều hành","Khung tuân thủ","Chương trình đánh giá","Kiểm tra hiện trường","Phát hiện","Khắc phục","Báo cáo"].every(x=>html.includes(x))],
-  ["human-in-the-loop",html.includes("AI chỉ đề xuất")&&html.includes("Tạo Draft Finding")&&html.includes("Chốt Finding")],
-  ["scope rule",html.includes("applicableRequirements")&&html.includes("Requirement không có applicability cụ thể được hiểu là áp dụng chung")],
+  ["human-in-the-loop",html.includes("AI chỉ đề xuất")&&html.includes("Tạo Phát hiện dự thảo")&&html.includes("Chốt Phát hiện")],
+  ["scope rule",html.includes("applicableRequirements")&&html.includes("Yêu cầu tuân thủ không có phạm vi áp dụng cụ thể được hiểu là áp dụng chung")],
   ["evidence revision",html.includes("revisions")&&html.includes("version:1")],
   ["finding-action-verification",html.includes("data-actionfor")&&html.includes("data-verify")],
   ["demo disclaimer",html.includes("không phải số liệu tuân thủ thực tế của AgriS")],
@@ -23,7 +23,14 @@ const checks=[
   ["one-level requirement approval",html.includes("approveRequirement")&&html.includes("pending_approval")&&html.includes("approve_framework")],
   ["independent verification",html.includes("Không được tự xác minh")&&html.includes("ownerPersonaId")],
   ["scoped reporting",html.includes("var scopedRA=visibleRA()")],
-  ["reset demo removed",!html.includes(">Reset demo</button>")]
+  ["reset demo removed",!html.includes(">Reset demo</button>")],
+  ["full requirement result taxonomy",["compliant","partially_compliant","non_compliant","not_applicable","insufficient_evidence"].every(x=>html.includes(x))&&html.includes("Ghi nhận kết quả Yêu cầu tuân thủ")],
+  ["source lifecycle metadata",["sourceCode","issuer","issueDate","effectiveFrom","effectiveTo","supersedesRef","owner"].every(x=>html.includes(x))],
+  ["bulk obligation review",html.includes("draftCheck")&&html.includes("bulkAccept")&&html.includes("bulkReject")&&html.includes("draftSourceFilter")],
+  ["scan OCR fallback",html.includes("Cần OCR/AI")&&html.includes("Nhập text thay thế")],
+  ["controlled requirement coding",html.includes("nextRequirementCode")&&!html.includes('code:"AUTO-"')],
+  ["closure evidence gate",html.includes("closure_evidence")&&html.includes("submitted_for_verification")&&html.includes("Cần bằng chứng đóng")],
+  ["Vietnamese business terminology",html.includes("Cuộc đánh giá đang mở")&&html.includes("Phát hiện đang mở")&&html.includes("Hành động quá hạn")&&!html.includes(">Chốt Finding</button>")]
 ];
 const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
 if(!scripts.length) throw new Error("Không tìm thấy script");
