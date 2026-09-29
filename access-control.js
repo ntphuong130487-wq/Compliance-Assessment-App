@@ -68,7 +68,8 @@
       fieldwork:"view_dashboard",
       findings:"view_dashboard",
       actions:"view_dashboard",
-      reports:"view_reports"
+      reports:"view_reports",
+      settings:"administer_access"
     };
     return can(map[view]||"view_dashboard");
   }
