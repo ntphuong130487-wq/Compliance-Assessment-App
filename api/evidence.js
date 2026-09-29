@@ -1,5 +1,5 @@
 import { put } from "@vercel/blob";
-import { clerkConfigured, authenticateClerkRequest } from "../lib/clerk-auth.js";
+import { clerkConfigured, userContext } from "../lib/clerk-auth.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -40,8 +40,9 @@ export default async function handler(req,res){
   if(!clerkConfigured()){
     return res.status(403).json({ok:false,error:"AUTH_NOT_CONFIGURED"});
   }
-  const session=await authenticateClerkRequest(req);
+  const session=await userContext(req);
   if(!session)return res.status(401).json({ok:false,error:"AUTH_REQUIRED"});
+  if(!session.provisioned||session.status!=="active")return res.status(403).json({ok:false,error:"USER_NOT_PROVISIONED"});
 
   try{
     const body=await readBody(req);
