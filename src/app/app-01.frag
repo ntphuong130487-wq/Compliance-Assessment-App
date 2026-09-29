@@ -61,5 +61,21 @@ const today=()=>new Date().toISOString().slice(0,10);
 
 function navHtml(){return NAV.map(([k,t])=>`<button data-nav="${k}" class="${view===k?'on':''}">${t}</button>`).join('');}
 function persistenceBanner(){
-  if(backend.databaseConfigured) return `<div class="note"><b>Lưu trữ:</b> backend đã nhận cấu hình database. Trạng thái kết nối chi tiết xem QA/Health.</div>`;
-  return `<div class="note"><b>Trạng thái hiện tại:</b> dữ liệu nghiệp vụ đang lưu trên trình duyệt để tiếp tục kiểm thử an toàn. Database dùng chung chưa được kích hoạt; chức
+  if(sync.conflict){
+    return `<div class="note danger"><b>Xung đột phiên bản:</b> cloud có phiên bản mới hơn nên hệ thống đã dừng ghi đè tự động. Dữ liệu trên trình duyệt vẫn được giữ an toàn.
+      <div class="row" style="margin-top:8px"><button class="btn alt" data-act="pullCloud">Nạp bản Cloud</button>
+      ${currentRole==='Admin'?'<button class="btn red" data-act="forceCloud">Ghi đè Cloud bằng bản hiện tại</button>':''}</div></div>`;
+  }
+  if(sync.configured&&sync.mode==='cloud'){
+    const t=sync.updatedAt?new Date(sync.updatedAt).toLocaleString('vi-VN'):'—';
+    return `<div class="note"><b>Lưu trữ dùng chung:</b> Cloud sync đang hoạt động · phiên bản ${esc(sync.version)} · cập nhật ${esc(t)}.
+      <button class="btn alt" style="margin-left:8px" data-act="syncNow">Đồng bộ ngay</button></div>`;
+  }
+  if(backend.databaseConfigured){
+    return `<div class="note"><b>Database:</b> backend đã nhận cấu hình nhưng phiên đồng bộ hiện ở trạng thái <b>${esc(sync.mode)}</b>. Dữ liệu cục bộ vẫn được giữ để tránh mất thông tin.</div>`;
+  }
+  if(sync.mode==='offline'){
+    return `<div class="note danger"><b>Offline fallback:</b> chưa kết nối được backend. Dữ liệu vẫn lưu trên trình duyệt và có thể Export/Import để sao lưu.</div>`;
+  }
+  return `<div class="note"><b>Trạng thái hiện tại:</b> dữ liệu nghiệp vụ đang lưu trên trình duyệt để tiếp tục kiểm thử an toàn. Database dùng chung chưa được kích hoạt; chức năng Export/Import dùng để sao lưu trong giai đoạn này.</div>`;
+}
