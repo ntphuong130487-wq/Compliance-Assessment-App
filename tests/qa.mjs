@@ -8,7 +8,10 @@ import {
 const html=fs.readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
 const app=fs.readFileSync(new URL('../dist/app.js',import.meta.url),'utf8');
 const css=fs.readFileSync(new URL('../dist/styles.css',import.meta.url),'utf8');
+const store=fs.readFileSync(new URL('../dist/store.js',import.meta.url),'utf8');
 const schema=fs.readFileSync(new URL('../db/schema.sql',import.meta.url),'utf8');
+const stateApi=fs.readFileSync(new URL('../api/state.js',import.meta.url),'utf8');
+const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
 
 const checks=[];
 function check(name,fn){try{fn();checks.push([name,true]);}catch(e){checks.push([name,false,e.message]);}}
@@ -22,6 +25,20 @@ check('Evidence SHA-256',()=>{assert.ok(app.includes('sha256'));assert.ok(schema
 check('Assessment lock',()=>{assert.ok(app.includes('Sign-off & Lock'));assert.ok(schema.includes('locked boolean'));});
 check('Responsive UI',()=>{assert.ok(css.includes('@media(max-width:720px)'));});
 check('Vercel health endpoint',()=>{assert.ok(fs.existsSync(new URL('../api/health.js',import.meta.url)));});
+check('Neon shared persistence API',()=>{
+  assert.ok(store.includes('/api/state'));
+  assert.ok(stateApi.includes('@neondatabase/serverless'));
+  assert.ok(pkg.dependencies?.['@neondatabase/serverless']);
+});
+check('Optimistic conflict control',()=>{
+  assert.ok(store.includes('VERSION_CONFLICT'));
+  assert.ok(store.includes('forcePushCloud'));
+  assert.ok(app.includes('Ghi đè Cloud'));
+});
+check('Safe local fallback',()=>{
+  assert.ok(store.includes('localStorage'));
+  assert.ok(app.includes('Offline fallback'));
+});
 check('22-object schema families',()=>{
   for(const table of ['org_units','actors','compliance_sources','compliance_frameworks','compliance_requirements','control_references','existing_controls','assessment_programs','compliance_assessments','assessment_scopes','assessment_assignments','requirement_assessments','findings','remediation_actions','verifications','compliance_exceptions','unit_responses','evidence','evidence_revisions','evidence_links','ai_analysis_proposals','decision_logs']) assert.ok(schema.includes(`CREATE TABLE IF NOT EXISTS ${table}`),table);
 });
