@@ -25,6 +25,7 @@ function normalizeState(s){
   s=s||seed();s.responses=s.responses||[];s.sources=s.sources||[];s.draftRequirements=s.draftRequirements||[];
   (s.requirements||[]).forEach(function(r){if(!r.status)r.status="effective"});
   (s.assessments||[]).forEach(function(a){a.processRef=a.processRef||"";a.activityRef=a.activityRef||"";a.locationRef=a.locationRef||"";a.periodFrom=a.periodFrom||"";a.periodTo=a.periodTo||""});
+  (s.findings||[]).forEach(function(f){if(f.status==="confirmed")f.status="final"});
   return s
 }
 function load(){try{return normalizeState(JSON.parse(localStorage.getItem(KEY))||seed())}catch(e){return normalizeState(seed())}}
@@ -72,7 +73,7 @@ function visibleRA(){var ids=visibleAssessments().map(function(a){return a.id});
 function findingAssessment(f){var r=S.ra.find(function(x){return x.id===f.raId});return r&&S.assessments.find(function(a){return a.id===r.assessmentId})}
 function visibleFindings(){return S.findings.filter(function(f){var a=findingAssessment(f);return a&&can("view_dashboard",a)})}
 function visibleActions(){var fs=visibleFindings().map(function(f){return f.id});return S.actions.filter(function(a){return fs.indexOf(a.findingId)>=0})}
-function metrics(){var rs=visibleRA(),fs=visibleFindings(),as=visibleActions(),done=rs.filter(function(x){return x.workflow==="done"}).length;return{active:visibleAssessments().filter(function(a){return a.status!=="closed"}).length,done:done,total:rs.length,coverage:rs.length?Math.round(done*100/rs.length):0,nc:rs.filter(function(x){return x.result==="non_compliant"}).length,find:fs.filter(function(x){return x.status!=="closed"}).length,over:as.filter(function(x){return x.status==="overdue"||(x.due&&new Date(x.due)<new Date()&&x.status!=="closed")}).length}}
+function metrics(){var rs=visibleRA(),fs=visibleFindings(),as=visibleActions(),done=rs.filter(function(x){return x.workflow==="done"}).length;return{active:visibleAssessments().filter(function(a){return a.status!=="closed"}).length,done:done,total:rs.length,coverage:rs.length?Math.round(done*100/rs.length):0,nc:rs.filter(function(x){return x.result==="non_compliant"}).length,find:fs.filter(function(x){return x.status!=="closed"&&x.status!=="dismissed"}).length,over:as.filter(function(x){return x.status==="overdue"||(x.due&&new Date(x.due)<new Date()&&x.status!=="closed")}).length}}
 function nav(){return tabs.filter(function(t){return ComplianceAccess.viewAllowed(t[0])}).map(function(t){return'<button data-nav="'+t[0]+'" class="'+(view===t[0]?"on":"")+'">'+t[1]+"</button>"}).join("")}
 function syncBadge(){var t=syncMode==="cloud"?"Cloud sync":syncMode==="offline"?"Offline fallback":syncMode==="secure-local"?"Secure local":"Local";var cls=syncMode==="cloud"?"green":syncMode==="offline"||syncMode==="secure-local"?"amber":"blue";return'<span class="tag '+cls+'" title="'+esc(lastSyncAt?"Đồng bộ: "+lastSyncAt:"")+'">'+t+'</span>'}
 function can(p,a){return ComplianceAccess.can(p,{assessment:a||null})}
@@ -82,7 +83,7 @@ function shell(title,body){return'<div class="app"><aside class="side"><div clas
 function dashboard(){var m=metrics();return shell("Điểm chính cần nắm",'<div class="grid kpis"><div class="card kpi"><span class="muted small">Assessment đang mở</span><b>'+m.active+'</b></div><div class="card kpi"><span class="muted small">Điểm hoàn tất</span><b>'+m.done+"/"+m.total+'</b></div><div class="card kpi"><span class="muted small">Coverage</span><b>'+m.coverage+'%</b></div><div class="card kpi"><span class="muted small">Không tuân thủ</span><b>'+m.nc+'</b></div><div class="card kpi"><span class="muted small">Finding mở</span><b>'+m.find+'</b></div><div class="card kpi"><span class="muted small">Action quá hạn</span><b>'+m.over+'</b></div></div><div class="split" style="margin-top:14px"><div class="card"><h3>Tiến độ assessment</h3>'+visibleAssessments().map(function(a){var rows=S.ra.filter(function(r){return r.assessmentId===a.id}),d=rows.filter(function(r){return r.workflow==="done"}).length,p=rows.length?Math.round(d*100/rows.length):0;return'<div style="margin:12px 0"><div class="row"><b>'+esc(a.name)+'</b><span class="right">'+tag(a.status)+'</span></div><div class="small muted">'+d+"/"+rows.length+' điểm hoàn tất</div><div class="bar"><i style="width:'+p+'%"></i></div></div>'}).join("")+'</div><div class="card"><h3>Nguyên tắc vận hành</h3><ul class="small"><li>AI chỉ đề xuất; người kiểm tra xác nhận kết luận.</li><li>Tiến độ đánh giá tách khỏi kết quả tuân thủ.</li><li>Evidence quản lý theo revision; không ghi đè lịch sử.</li><li>Finding → Action → Verification → Close.</li></ul></div></div>')}
 
 function sourceStatusLabel(s){
-  return({draft:"Nháp",extracted:"Đã bóc tách",published:"Đã publish",search_not_configured:"Chưa kết nối nguồn search",needs_ocr:"Cần OCR/AI",error:"Lỗi"})[s]||s;
+  return({draft:"Nháp",extracted:"Đã bóc tách",pending_approval:"Chờ duyệt",published:"Đã publish",search_not_configured:"Chưa kết nối nguồn search",needs_ocr:"Cần OCR/AI",error:"Lỗi"})[s]||s;
 }
 function localExtract(text,sourceId){
   var keys=["phải","không được","có trách nhiệm","chịu trách nhiệm","chỉ được","bắt buộc","thực hiện","bảo đảm","đảm bảo","lưu giữ","lưu trữ","báo cáo","phê duyệt","tuân thủ","cấm","đăng ký","thông báo"];
@@ -150,6 +151,7 @@ function approveRequirement(rid){
   r.status="effective";r.approvedBy=ComplianceAccess.current().role;r.approvedAt=now();
   var fw=S.frameworks.find(function(f){return f.reqIds.indexOf(rid)>=0});
   if(fw&&fw.reqIds.every(function(id){var q=S.requirements.find(function(x){return x.id===id});return !q||q.status!=="pending_approval"}))fw.status="effective";
+  if(r.sourceId){var src=S.sources.find(function(s){return s.id===r.sourceId});if(src){var related=S.requirements.filter(function(q){return q.sourceId===src.id});if(related.length&&related.every(function(q){return q.status==="effective"||q.status==="rejected"}))src.status="published"}}
   S.logs.push({id:id("log"),type:"approve_requirement",object:"Requirement",at:now(),note:r.code||r.title});save();render();
 }
 function rejectRequirement(rid){
