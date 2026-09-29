@@ -4,11 +4,11 @@
   var roles={
     compliance_admin:{
       label:"Quản trị Compliance",
-      permissions:["view_dashboard","manage_framework","manage_assessment","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports","administer_access"]
+      permissions:["view_dashboard","manage_framework","approve_framework","manage_assessment","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports","administer_access"]
     },
     compliance_manager:{
       label:"Quản lý Tuân thủ",
-      permissions:["view_dashboard","manage_framework","manage_assessment","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports"]
+      permissions:["view_dashboard","manage_framework","approve_framework","manage_assessment","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports"]
     },
     lead_assessor:{
       label:"Trưởng đoàn đánh giá",
