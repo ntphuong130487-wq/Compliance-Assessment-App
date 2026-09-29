@@ -3,7 +3,10 @@ import {
   createAssessmentFromFramework, transitionAssessment, metrics, validateState,
   frameworkRequirementIds, repeatFindingGroups
 } from './domain.js';
-import { loadState, saveState, resetState, exportState, importState, sha256, backendHealth } from './store.js';
+import {
+  loadState, saveState, resetState, exportState, importState, sha256, backendHealth,
+  initializeCloudSync, getSyncStatus, onSyncStatus, syncNow, pullCloudState, forcePushCloud
+} from './store.js';
 
 const root=document.getElementById('root');
 const fileInput=document.getElementById('fileInput');
@@ -28,7 +31,15 @@ let currentRole=sessionStorage.getItem('agris_compliance_role')||'Compliance';
 let selectedAssessment=state.assessments[0]?.id||null;
 let selectedRA=state.requirementAssessments[0]?.id||null;
 let backend={ok:false,persistence:'browser-local',databaseConfigured:false};
+let sync=getSyncStatus();
+onSyncStatus(x=>{sync=x;render();});
 backendHealth().then(x=>{backend=x;render();});
+initializeCloudSync(remote=>{
+  state=remote;
+  selectedAssessment=state.assessments[0]?.id||null;
+  selectedRA=state.requirementAssessments[0]?.id||null;
+  render();
+});
 
 const esc=s=>String(s??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
 const lab=x=>LABELS[x]||x||'—';
