@@ -22,7 +22,11 @@ assert(A.can("view_reports"),"Viewer should view reports");
 
 A.setPersona("p_admin");
 assert(A.can("administer_access"),"Admin must administer access");
+assert(A.can("approve_framework"),"Admin must approve framework");
 assert(A.can("confirm_finding"),"Admin must confirm finding");
+
+A.setPersona("p_manager");
+assert(A.can("approve_framework"),"Compliance manager must approve framework");
 
 A.setPersona("p_assessor");
 assert(A.can("conduct_fieldwork",{assessment:{orgId:"agric"}}),"Assessor should work in assigned org");
