@@ -14,8 +14,14 @@ async function readBody(req){
   return Buffer.concat(chunks);
 }
 
-function authReady(){
+function authConfigured(){
   return Boolean(process.env.AUTH_MODE);
+}
+
+function authEnforcementReady(){
+  // Secure-by-default: this release does not yet verify an end-user identity
+  // on each request. Do not enable private evidence writes until that layer exists.
+  return false;
 }
 
 export default async function handler(req,res){
@@ -25,7 +31,8 @@ export default async function handler(req,res){
     return res.status(200).json({
       ok:true,
       configured:Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-      authConfigured:authReady(),
+      authConfigured:authConfigured(),
+      authEnforcementReady:authEnforcementReady(),
       maxBytes:MAX_BYTES
     });
   }
@@ -39,8 +46,16 @@ export default async function handler(req,res){
     return res.status(503).json({ok:false,error:"BLOB_NOT_CONFIGURED"});
   }
 
-  if(!authReady()){
+  if(!authConfigured()){
     return res.status(403).json({ok:false,error:"AUTH_REQUIRED"});
+  }
+
+  if(!authEnforcementReady()){
+    return res.status(501).json({
+      ok:false,
+      error:"AUTH_ENFORCEMENT_PENDING",
+      message:"Private evidence upload remains disabled until identity verification is enforced server-side."
+    });
   }
 
   try{
