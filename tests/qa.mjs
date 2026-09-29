@@ -30,7 +30,13 @@ const checks=[
   ["scan OCR fallback",html.includes("Cần OCR/AI")&&html.includes("Nhập text thay thế")],
   ["controlled requirement coding",html.includes("nextRequirementCode")&&!html.includes('code:"AUTO-"')],
   ["closure evidence gate",html.includes("closure_evidence")&&html.includes("submitted_for_verification")&&html.includes("Cần bằng chứng đóng")],
-  ["Vietnamese business terminology",html.includes("Cuộc đánh giá đang mở")&&html.includes("Phát hiện đang mở")&&html.includes("Hành động quá hạn")&&!html.includes(">Chốt Finding</button>")]
+  ["Vietnamese business terminology",html.includes("Cuộc đánh giá đang mở")&&html.includes("Phát hiện đang mở")&&html.includes("Hành động quá hạn")&&!html.includes(">Chốt Finding</button>")],
+  ["management dashboard",html.includes("Điểm cần xử lý")&&html.includes("Tình hình theo đơn vị")&&html.includes("Yêu cầu có phát hiện lặp lại")],
+  ["notification and escalation",html.includes("notificationCandidates")&&html.includes("Chuyển cấp")&&html.includes("Thông báo & chuyển cấp")],
+  ["global search",html.includes("globalSearch")&&html.includes("Tìm kiếm toàn hệ thống")&&html.includes("Tìm toàn hệ thống")],
+  ["report exports",html.includes("exportCSV")&&html.includes("exportJSON")&&html.includes("printManagementReport")],
+  ["production readiness UI",html.includes("/api/readiness")&&html.includes("Mức sẵn sàng Production")],
+  ["Entra UI integration",html.includes("/api/auth/login")&&html.includes("/api/auth/me")&&html.includes("Đăng nhập Microsoft")]
 ];
 const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
 if(!scripts.length) throw new Error("Không tìm thấy script");
