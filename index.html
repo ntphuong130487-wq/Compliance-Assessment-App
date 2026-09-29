@@ -168,7 +168,7 @@ async function refreshCurrentUser(){
   try{
     var me=await fetch("/api/auth/me",{headers:{"Accept":"application/json"}}),d=await me.json();
     currentUser=me.ok&&d.authenticated?d.user:null;
-    if(currentUser){var p=ComplianceAccess.personas.find(function(x){return x.role===currentUser.role});if(p)ComplianceAccess.setPersona(p.id)}
+    ComplianceAccess.setRuntimeUser(currentUser);
   }catch(e){currentUser=null}
 }
 async function loadRuntimeReadiness(){
@@ -183,6 +183,7 @@ async function openClerkSignIn(){
   else modal('<h3>Chưa cấu hình đăng nhập</h3><p>Clerk chưa được cấu hình trên môi trường triển khai.</p>');
 }
 async function signOutClerk(){
+  ComplianceAccess.setRuntimeUser(null);currentUser=null;
   if(clerkInstance){await clerkInstance.signOut();location.reload()}
 }
 function authWidget(){
