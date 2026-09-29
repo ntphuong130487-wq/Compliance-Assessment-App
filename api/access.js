@@ -1,3 +1,4 @@
+import { authConfigured } from "../lib/auth-session.js";
 const roles = {
   compliance_admin:["view_dashboard","manage_framework","approve_framework","manage_assessment","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports","administer_access"],
   compliance_manager:["view_dashboard","manage_framework","approve_framework","manage_assessment","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports"],
@@ -12,7 +13,7 @@ export default function handler(req,res){
   res.setHeader("Cache-Control","no-store");
   res.status(200).json({
     ok:true,
-    authConfigured:Boolean(process.env.AUTH_MODE),
+    authConfigured:authConfigured(),
     authMode:process.env.AUTH_MODE||"not-configured",
     enforcement:"authorization-policy-ready; authentication-provider-pending",
     roles
