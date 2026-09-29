@@ -1,17 +1,13 @@
-process.env.AUTH_MODE="entra";
-process.env.ENTRA_TENANT_ID="tenant-test";
-process.env.ENTRA_CLIENT_ID="client-test";
-process.env.ENTRA_CLIENT_SECRET="secret-test";
-process.env.SESSION_SECRET="0123456789abcdef0123456789abcdef";
-process.env.AUTH_MANAGER_EMAILS="manager@example.com";
-process.env.AUTH_DEFAULT_ROLE="viewer";
+process.env.AUTH_MODE="clerk";
+process.env.CLERK_PUBLISHABLE_KEY="pk_test_dGVzdC5jbGVyay5hY2NvdW50cy5kZXYk";
+process.env.CLERK_SECRET_KEY="sk_test_example";
+process.env.AUTH_ALLOWED_EMAIL_DOMAINS="agris.example,subsidiary.example";
 
-const A=await import("../lib/auth-session.js");
+const A=await import("../lib/clerk-auth.js");
 function assert(ok,msg){if(!ok)throw new Error(msg)}
-assert(A.authConfigured(),"Entra auth should be configured");
-assert(A.roleForIdentity("manager@example.com")==="compliance_manager","Manager mapping failed");
-assert(A.roleForIdentity("other@example.com")==="viewer","Default role failed");
-const token=await A.createSession({sub:"u1",email:"manager@example.com",name:"Manager",role:"compliance_manager",tenantId:"t1"});
-const user=await A.readSession({headers:{cookie:"agris_compliance_session="+encodeURIComponent(token)}});
-assert(user&&user.email==="manager@example.com","Signed session verification failed");
-console.log("PASS - Entra auth/session foundation");
+assert(A.clerkConfigured(),"Clerk should be configured");
+assert(A.allowedEmail("user@agris.example"),"Allowed domain should pass");
+assert(!A.allowedEmail("user@gmail.com"),"Unapproved domain should fail");
+assert(A.normalizeRole("compliance_manager")==="compliance_manager","Known role normalization failed");
+assert(A.normalizeRole("unknown_role")==="viewer","Unknown role should fall back to viewer");
+console.log("PASS - Clerk auth/provisioning foundation");
