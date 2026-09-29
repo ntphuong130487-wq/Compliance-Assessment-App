@@ -24,13 +24,14 @@ export default async function handler(req,res){
   for(const k of ["CLERK_PUBLISHABLE_KEY","CLERK_SECRET_KEY","APP_URL"])if(!process.env[k])missing.push(k);
   if(!process.env.DATABASE_URL)missing.push("DATABASE_URL");
   if(!process.env.BLOB_READ_WRITE_TOKEN)missing.push("BLOB_READ_WRITE_TOKEN");
+  if(process.env.DATA_MODE!=="normalized")missing.push("DATA_MODE=normalized");
   res.status(200).json({
     ok:true,
     version:"0.7.0",
-    productionReady:clerkConfigured()&&databaseConfigured&&normalizedReady&&Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    productionReady:clerkConfigured()&&databaseConfigured&&normalizedReady&&Boolean(process.env.BLOB_READ_WRITE_TOKEN)&&process.env.DATA_MODE==="normalized",
     missing,
     auth:{configured:clerkConfigured(),mode:process.env.AUTH_MODE||null,provider:process.env.AUTH_MODE==="clerk"?"Clerk":null,invitationOnly:true},
-    database:{configured:databaseConfigured,stateStoreReady,normalizedReady,error:dbError},
+    database:{configured:databaseConfigured,stateStoreReady,normalizedReady,dataMode:process.env.DATA_MODE||"shared-json",error:dbError},
     storage:{configured:Boolean(process.env.BLOB_READ_WRITE_TOKEN),provider:process.env.BLOB_READ_WRITE_TOKEN?"Vercel Blob":null},
     search:{regulationProviderConfigured:Boolean(process.env.REGULATION_SEARCH_PROVIDER)},
     ai:{configured:Boolean(process.env.AI_GATEWAY_API_KEY&&process.env.AI_EXTRACTION_MODEL)}
