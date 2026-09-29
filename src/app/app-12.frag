@@ -13,6 +13,9 @@ function bind(){
   document.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.act;
     if(a==='qa')qa(); if(a==='export')exportState(state); if(a==='import'){if(!roleCan('import')&&currentRole!=='Admin'){alert('Chỉ Admin được import/restore dữ liệu.');return;}importInput.click();}
+    if(a==='syncNow')syncNow(state).then(r=>{if(!r.ok&&!r.conflict)alert('Đồng bộ chưa thành công; dữ liệu cục bộ vẫn được giữ.');});
+    if(a==='pullCloud'){if(confirm('Nạp phiên bản Cloud? Các thay đổi cục bộ chưa đồng bộ sẽ bị thay thế.'))pullCloudState();}
+    if(a==='forceCloud'){if(currentRole!=='Admin'){alert('Chỉ Admin được ghi đè Cloud.');return;}if(confirm('Ghi đè dữ liệu Cloud bằng bản đang có trên trình duyệt? Hành động này chỉ nên dùng sau khi đã đối chiếu xung đột.'))forcePushCloud(state);}
     if(a==='closeModal')closeModal(); if(a==='loadDemo'){if(confirm('Nạp dữ liệu DEMO? Dữ liệu hiện tại sẽ được thay bằng bộ minh họa.')){state=loadDemo(state);persist();selectedAssessment=state.assessments[0]?.id;selectedRA=state.requirementAssessments[0]?.id;render();}}
     if(a==='newSource')newSource(); if(a==='newFramework')newFramework(); if(a==='newAssessment')newAssessment(); if(a==='uploadEvidence')uploadEvidence(); if(a==='saveObservation')saveObservation(); if(a==='analyze')analyze(); if(a==='createFinding')createFinding();
   });
