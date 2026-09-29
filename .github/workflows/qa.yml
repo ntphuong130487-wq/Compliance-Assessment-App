@@ -34,11 +34,10 @@ jobs:
           node --check api/obligations/extract.js
           node --check api/source/extract.js
           node --check api/regulations/search.js
-          node --check lib/auth-session.js
-          node --check api/auth/login.js
-          node --check api/auth/callback.js
+          node --check lib/clerk-auth.js
+          node --check api/auth/config.js
           node --check api/auth/me.js
-          node --check api/auth/logout.js
+          node --check api/admin/users.js
           node --check api/readiness.js
           node --check api/notifications/run.js
           node --check scripts/db-check.mjs
