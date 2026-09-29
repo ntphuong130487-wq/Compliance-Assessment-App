@@ -16,10 +16,16 @@ jobs:
       - name: Build and domain QA
         run: npm run qa
 
-      - name: Check serverless API syntax
+      - name: Run RBAC policy QA
+        run: node tests/access-control.mjs
+
+      - name: Check application and serverless syntax
         run: |
+          node --check access-control.js
           node --check api/state.js
           node --check api/health.js
+          node --check api/access.js
+          node --check api/evidence.js
           node --check dist/app.js
           node --check dist/domain.js
           node --check dist/store.js
