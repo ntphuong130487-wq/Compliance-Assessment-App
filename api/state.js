@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { clerkConfigured, authenticateClerkRequest } from "../lib/clerk-auth.js";
+import { clerkConfigured, userContext } from "../lib/clerk-auth.js";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 
@@ -50,9 +50,12 @@ export default async function handler(req, res) {
       return res.status(403).json({ ok: false, configured: true, authRequired: true, error: "AUTH_NOT_CONFIGURED" });
     }
 
-    const session = await authenticateClerkRequest(req);
+    const session = await userContext(req);
     if (!session) {
       return res.status(401).json({ ok: false, configured: true, authRequired: true, authConfigured: true, error: "AUTH_REQUIRED" });
+    }
+    if(!session.provisioned||session.status!=="active"){
+      return res.status(403).json({ok:false,configured:true,error:"USER_NOT_PROVISIONED"});
     }
 
     if (req.method === "GET") {
