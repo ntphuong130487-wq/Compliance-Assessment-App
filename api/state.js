@@ -7,6 +7,12 @@ function db() {
   return neon(process.env.DATABASE_URL);
 }
 
+function authEnforcementReady() {
+  // Production shared-state access must remain locked until the backend can
+  // verify an end-user identity and its server-side scope on every request.
+  return false;
+}
+
 async function ensure(sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS compliance_app_state (
@@ -38,6 +44,16 @@ export default async function handler(req, res) {
       mode: "blocked-until-auth",
       error: "AUTH_REQUIRED",
       message: "Shared compliance data is disabled until server-side authentication is configured."
+    });
+  }
+
+  if (!authEnforcementReady()) {
+    return res.status(501).json({
+      ok: false,
+      configured: true,
+      mode: "auth-enforcement-pending",
+      error: "AUTH_ENFORCEMENT_PENDING",
+      message: "Shared compliance data remains locked until identity and scope are verified server-side."
     });
   }
 
