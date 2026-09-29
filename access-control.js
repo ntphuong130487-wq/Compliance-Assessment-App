@@ -3,7 +3,7 @@
   var STORAGE_KEY="agris_compliance_persona_v03";
   var roles={
     compliance_admin:{
-      label:"Quản trị Compliance",
+      label:"Quản trị Tuân thủ",
       permissions:["view_dashboard","manage_framework","approve_framework","manage_assessment","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports","administer_access"]
     },
     compliance_manager:{
@@ -32,7 +32,7 @@
     }
   };
   var personas=[
-    {id:"p_admin",label:"Mô phỏng · Quản trị Compliance",role:"compliance_admin",orgIds:["*"]},
+    {id:"p_admin",label:"Mô phỏng · Quản trị Tuân thủ",role:"compliance_admin",orgIds:["*"]},
     {id:"p_manager",label:"Mô phỏng · Quản lý Tuân thủ",role:"compliance_manager",orgIds:["*"]},
     {id:"p_lead",label:"Mô phỏng · Trưởng đoàn đánh giá",role:"lead_assessor",orgIds:["*"]},
     {id:"p_assessor",label:"Mô phỏng · Người kiểm tra",role:"assessor",orgIds:["agric"]},
