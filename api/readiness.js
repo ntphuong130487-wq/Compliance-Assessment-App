@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { authConfigured } from "../lib/auth-session.js";
+import { clerkConfigured } from "../lib/clerk-auth.js";
 
 export default async function handler(req,res){
   res.setHeader("Cache-Control","no-store");
@@ -20,18 +20,16 @@ export default async function handler(req,res){
     }catch(e){dbError="DATABASE_CHECK_FAILED"}
   }
   const missing=[];
-  if(!process.env.AUTH_MODE)missing.push("AUTH_MODE");
-  if(process.env.AUTH_MODE==="entra"){
-    for(const k of ["ENTRA_TENANT_ID","ENTRA_CLIENT_ID","ENTRA_CLIENT_SECRET","SESSION_SECRET","APP_URL"])if(!process.env[k])missing.push(k);
-  }
+  if(process.env.AUTH_MODE!=="clerk")missing.push("AUTH_MODE=clerk");
+  for(const k of ["CLERK_PUBLISHABLE_KEY","CLERK_SECRET_KEY","APP_URL"])if(!process.env[k])missing.push(k);
   if(!process.env.DATABASE_URL)missing.push("DATABASE_URL");
   if(!process.env.BLOB_READ_WRITE_TOKEN)missing.push("BLOB_READ_WRITE_TOKEN");
   res.status(200).json({
     ok:true,
-    version:"0.6.0",
-    productionReady:authConfigured()&&databaseConfigured&&normalizedReady&&Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    version:"0.7.0",
+    productionReady:clerkConfigured()&&databaseConfigured&&normalizedReady&&Boolean(process.env.BLOB_READ_WRITE_TOKEN),
     missing,
-    auth:{configured:authConfigured(),mode:process.env.AUTH_MODE||null,provider:process.env.AUTH_MODE==="entra"?"Microsoft Entra ID":null},
+    auth:{configured:clerkConfigured(),mode:process.env.AUTH_MODE||null,provider:process.env.AUTH_MODE==="clerk"?"Clerk":null,invitationOnly:true},
     database:{configured:databaseConfigured,stateStoreReady,normalizedReady,error:dbError},
     storage:{configured:Boolean(process.env.BLOB_READ_WRITE_TOKEN),provider:process.env.BLOB_READ_WRITE_TOKEN?"Vercel Blob":null},
     search:{regulationProviderConfigured:Boolean(process.env.REGULATION_SEARCH_PROVIDER)},
