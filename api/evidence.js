@@ -1,4 +1,5 @@
 import { put } from "@vercel/blob";
+import { authConfigured, readSession } from "../lib/auth-session.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -14,9 +15,6 @@ async function readBody(req){
   return Buffer.concat(chunks);
 }
 
-function authReady(){
-  return Boolean(process.env.AUTH_MODE);
-}
 
 export default async function handler(req,res){
   res.setHeader("Cache-Control","no-store");
@@ -25,7 +23,7 @@ export default async function handler(req,res){
     return res.status(200).json({
       ok:true,
       configured:Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-      authConfigured:authReady(),
+      authConfigured:authConfigured(),
       maxBytes:MAX_BYTES
     });
   }
@@ -39,9 +37,11 @@ export default async function handler(req,res){
     return res.status(503).json({ok:false,error:"BLOB_NOT_CONFIGURED"});
   }
 
-  if(!authReady()){
-    return res.status(403).json({ok:false,error:"AUTH_REQUIRED"});
+  if(!authConfigured()){
+    return res.status(403).json({ok:false,error:"AUTH_NOT_CONFIGURED"});
   }
+  const session=await readSession(req);
+  if(!session)return res.status(401).json({ok:false,error:"AUTH_REQUIRED"});
 
   try{
     const body=await readBody(req);
