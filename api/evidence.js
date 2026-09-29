@@ -1,5 +1,5 @@
 import { put } from "@vercel/blob";
-import { authConfigured, readSession } from "../lib/auth-session.js";
+import { clerkConfigured, authenticateClerkRequest } from "../lib/clerk-auth.js";
 
 export const config = { api: { bodyParser: false } };
 
@@ -23,7 +23,7 @@ export default async function handler(req,res){
     return res.status(200).json({
       ok:true,
       configured:Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-      authConfigured:authConfigured(),
+      authConfigured:clerkConfigured(),
       maxBytes:MAX_BYTES
     });
   }
@@ -37,10 +37,10 @@ export default async function handler(req,res){
     return res.status(503).json({ok:false,error:"BLOB_NOT_CONFIGURED"});
   }
 
-  if(!authConfigured()){
+  if(!clerkConfigured()){
     return res.status(403).json({ok:false,error:"AUTH_NOT_CONFIGURED"});
   }
-  const session=await readSession(req);
+  const session=await authenticateClerkRequest(req);
   if(!session)return res.status(401).json({ok:false,error:"AUTH_REQUIRED"});
 
   try{
