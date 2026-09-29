@@ -11,7 +11,9 @@ const checks=[
   ["safe fallback",html.includes("Offline fallback")&&html.includes("localStorage")],
   ["rbac ui",html.includes("ComplianceAccess")&&html.includes("Mô phỏng quyền")],
   ["scoped action guard",html.includes('guard("confirm_finding"')&&html.includes('guard("verify_action"')],
-  ["evidence storage client",html.includes("/api/evidence")&&html.includes("blob-private")]
+  ["evidence storage client",html.includes("/api/evidence")&&html.includes("blob-private")],
+  ["org-scoped visibility",html.includes("visibleAssessments")&&html.includes("visibleFindings")],
+  ["unit response workflow",html.includes("data-respond")&&html.includes("Phản hồi phát hiện")&&html.includes("responses")]
 ];
 const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
 if(!scripts.length) throw new Error("Không tìm thấy script");
