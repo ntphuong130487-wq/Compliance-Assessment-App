@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { authConfigured, readSession } from "../lib/auth-session.js";
+import { clerkConfigured, authenticateClerkRequest } from "../lib/clerk-auth.js";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   try {
     await ensure(sql);
 
-    if (!authConfigured()) {
+    if (!clerkConfigured()) {
       if (req.method === "GET") {
         return res.status(200).json({
           ok: true,
@@ -44,13 +44,13 @@ export default async function handler(req, res) {
           authRequired: true,
           authConfigured: false,
           mode: "secure-local",
-          message: "Database exists but Microsoft Entra SSO is not configured."
+          message: "Database exists but Clerk authentication is not configured."
         });
       }
       return res.status(403).json({ ok: false, configured: true, authRequired: true, error: "AUTH_NOT_CONFIGURED" });
     }
 
-    const session = await readSession(req);
+    const session = await authenticateClerkRequest(req);
     if (!session) {
       return res.status(401).json({ ok: false, configured: true, authRequired: true, authConfigured: true, error: "AUTH_REQUIRED" });
     }
