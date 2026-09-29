@@ -37,7 +37,9 @@ jobs:
           tar -xzf /tmp/compliance-prod-v1.tgz
           rm -f index.html
           rm -rf bootstrap
-          rm -f .github/workflows/materialize.yml
+          # GitHub App token cannot modify workflow files. Keep the workflow files
+          # exactly as they exist on the remote branch; they will be upgraded separately.
+          git checkout -- .github/workflows/qa.yml .github/workflows/materialize.yml
 
       - uses: actions/setup-node@v4
         with:
