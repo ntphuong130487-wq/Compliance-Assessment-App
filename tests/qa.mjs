@@ -8,7 +8,10 @@ const checks=[
   ["finding-action-verification",html.includes("data-actionfor")&&html.includes("data-verify")],
   ["demo disclaimer",html.includes("không phải số liệu tuân thủ thực tế của AgriS")],
   ["cloud sync client",html.includes("/api/state")&&html.includes("Cloud sync")],
-  ["safe fallback",html.includes("Offline fallback")&&html.includes("localStorage")]
+  ["safe fallback",html.includes("Offline fallback")&&html.includes("localStorage")],
+  ["rbac ui",html.includes("ComplianceAccess")&&html.includes("Mô phỏng quyền")],
+  ["scoped action guard",html.includes('guard("confirm_finding"')&&html.includes('guard("verify_action"')],
+  ["evidence storage client",html.includes("/api/evidence")&&html.includes("blob-private")]
 ];
 const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
 if(!scripts.length) throw new Error("Không tìm thấy script");
