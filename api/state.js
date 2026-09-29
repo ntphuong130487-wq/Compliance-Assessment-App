@@ -31,6 +31,16 @@ export default async function handler(req, res) {
     });
   }
 
+  if (!process.env.AUTH_MODE) {
+    return res.status(403).json({
+      ok: false,
+      configured: true,
+      mode: "blocked-until-auth",
+      error: "AUTH_REQUIRED",
+      message: "Shared compliance data is disabled until server-side authentication is configured."
+    });
+  }
+
   try {
     await ensure(sql);
 
