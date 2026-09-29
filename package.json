@@ -1,6 +1,6 @@
 {
   "name": "agris-compliance-assessment",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,9 +10,11 @@
     "@neondatabase/serverless": "^1.0.2",
     "@vercel/blob": "latest",
     "pdf-parse": "1.1.1",
-    "mammoth": "1.8.0"
+    "mammoth": "1.8.0",
+    "jose": "^6.1.0"
   },
   "scripts": {
-    "test": "node tests/qa.mjs"
+    "test": "node tests/qa.mjs",
+    "db:check": "node scripts/db-check.mjs"
   }
 }
