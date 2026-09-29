@@ -1,9 +1,16 @@
 {
-  "name":"agris-compliance-assessment",
-  "version":"0.2.0",
-  "private":true,
-  "type":"module",
-  "engines":{"node":">=22"},
-  "dependencies":{"@neondatabase/serverless":"^1.0.2"},
-  "scripts":{"test":"node tests/qa.mjs"}
+  "name": "agris-compliance-assessment",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
+    "@vercel/blob": "latest"
+  },
+  "scripts": {
+    "test": "node tests/qa.mjs"
+  }
 }
