@@ -7,6 +7,10 @@ function db() {
   return neon(process.env.DATABASE_URL);
 }
 
+function authReady() {
+  return Boolean(process.env.AUTH_MODE);
+}
+
 async function ensure(sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS compliance_app_state (
@@ -33,6 +37,19 @@ export default async function handler(req, res) {
 
   try {
     await ensure(sql);
+
+    if (!authReady()) {
+      if (req.method === "GET") {
+        return res.status(200).json({
+          ok: true,
+          configured: true,
+          authRequired: true,
+          mode: "secure-local",
+          message: "Database exists but identity provider is not configured."
+        });
+      }
+      return res.status(403).json({ ok: false, configured: true, error: "AUTH_REQUIRED" });
+    }
 
     if (req.method === "GET") {
       const rows = await sql`
