@@ -4,7 +4,10 @@
   "private":true,
   "type":"module",
   "engines":{"node":">=22"},
-  "dependencies":{"@neondatabase/serverless":"^1.0.2"},
+  "dependencies":{
+    "@neondatabase/serverless":"^1.0.2",
+    "@vercel/blob":"latest"
+  },
   "scripts":{
     "build":"node build.mjs",
     "test":"node tests/qa.mjs",
