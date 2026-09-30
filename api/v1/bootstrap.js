@@ -73,7 +73,9 @@ export default async function handler(req,res){
       ? await sql`
           SELECT id::text, requirement_assessment_id::text AS "raId",title,fact,criteria,gap,
                  root_cause AS "rootCause",risk_impact AS impact,severity,priority,status,
-                 recommendation AS rec,disposition,disposition_note AS "dispositionNote",
+                 recommendation AS rec,remediation_required AS "remediationRequired",
+                 remediation_requirement AS "remediationRequirement",
+                 disposition,disposition_note AS "dispositionNote",
                  finalized_by AS "finalizedBy",finalized_at AS "finalizedAt",created_at AS "createdAt"
           FROM findings WHERE requirement_assessment_id::text = ANY(${raIds})
           ORDER BY created_at DESC
@@ -92,7 +94,7 @@ export default async function handler(req,res){
 
     const actions=findingIds.length
       ? await sql`
-          SELECT id::text,finding_id::text AS "findingId",action_text AS text,owner,
+          SELECT id::text,finding_id::text AS "findingId",action_type AS "actionType",action_text AS text,owner,
                  owner_identity_id AS "ownerPersonaId",due_date AS due,status,progress,
                  closure_submitted_at AS "closureSubmittedAt",created_by AS "createdByPersonaId",
                  created_at AS "createdAt",verification_status AS "verificationStatus"
