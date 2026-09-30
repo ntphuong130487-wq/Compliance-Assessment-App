@@ -34,11 +34,22 @@ function normalizeState(s){
   return s
 }
 function load(){try{return normalizeState(JSON.parse(localStorage.getItem(KEY))||seed())}catch(e){return normalizeState(seed())}}
-var S=load(),syncMode="local",remoteVersion=0,syncTimer=null,lastSyncAt=null;
+var S=load(),syncMode="local",remoteVersion=0,syncTimer=null,lastSyncAt=null,dataModeRuntime="shared-json";
 selectedAssessment=S.assessments[0]&&S.assessments[0].id;selectedRA=S.ra[0]&&S.ra[0].id;
 function persistLocal(){localStorage.setItem(KEY,JSON.stringify(S))}
 async function pullRemote(){
   try{
+    var ready=await fetch("/api/readiness",{headers:{"Accept":"application/json"}}).then(function(r){return r.json()});
+    runtimeReadiness=ready;dataModeRuntime=ready&&ready.database&&ready.database.dataMode||"shared-json";
+    if(dataModeRuntime==="normalized"){
+      var nr=await fetch("/api/v1/bootstrap",{headers:{"Accept":"application/json"}}),nd=await nr.json();
+      if(nr.status===401||nr.status===403){syncMode="secure-local";render();return}
+      if(!nr.ok||!nd.ok){syncMode="offline";render();return}
+      S=normalizeState(nd.state);syncMode="normalized";lastSyncAt=now();persistLocal();
+      selectedAssessment=S.assessments[0]&&S.assessments[0].id;
+      selectedRA=S.ra[0]&&S.ra[0].id;
+      render();return;
+    }
     var res=await fetch("/api/state",{headers:{"Accept":"application/json"}});
     var data=await res.json();
     if(!data.configured){syncMode="local";render();return}
@@ -56,6 +67,7 @@ async function pullRemote(){
   }catch(e){syncMode="offline";render()}
 }
 async function pushRemote(force){
+  if(syncMode==="normalized")return;
   if(!force&&syncMode!=="cloud")return;
   try{
     var res=await fetch("/api/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({state:S,version:remoteVersion})});
@@ -64,8 +76,16 @@ async function pushRemote(force){
     if(data.configured&&data.ok){syncMode="cloud";remoteVersion=Number(data.version||remoteVersion);lastSyncAt=data.updatedAt||now();render()}
   }catch(e){syncMode="offline"}
 }
+async function apiCommand(command,payload){
+  var res=await fetch("/api/v1/commands",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({command:command,payload:payload||{}})});
+  var data=await res.json();
+  if(!res.ok||!data.ok){throw new Error(data.error||"COMMAND_FAILED")}
+  await pullRemote();
+  return data;
+}
 function save(){
   persistLocal();
+  if(syncMode==="normalized")return;
   clearTimeout(syncTimer);
   syncTimer=setTimeout(function(){pushRemote(false)},450);
 }
