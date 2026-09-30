@@ -22,7 +22,7 @@ const screens=[
   ["settings","Cấu hình vận hành","ADMIN & OPERATIONS"]
 ];
 for(const [nav,title,eyebrow] of screens){
-  await page.locator("[data-nav='"+nav+"']").click();
+  await page.locator(".side [data-nav='"+nav+"']").click();
   await page.waitForTimeout(40);
   const body=await page.locator("body").innerText();
   assert(body.includes(title),"Screen "+nav+" missing title: "+title);
