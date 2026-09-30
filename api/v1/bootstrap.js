@@ -104,6 +104,29 @@ export default async function handler(req,res){
       : [];
 
     const actionIds=actions.map(x=>x.id);
+    const actionChangeRequests=actionIds.length
+      ? await sql`
+          SELECT id::text,action_id::text AS "actionId",request_type AS "requestType",
+                 current_due_date AS "currentDueDate",requested_due_date AS "requestedDueDate",
+                 reason,requested_by AS "requestedBy",requested_at AS "requestedAt",
+                 status,decided_by AS "decidedBy",decided_at AS "decidedAt",decision_note AS "decisionNote"
+          FROM remediation_action_change_requests
+          WHERE action_id::text = ANY(${actionIds})
+          ORDER BY requested_at DESC
+        `
+      : [];
+    const actionLogs=actionIds.length
+      ? await sql`
+          SELECT id::text,decision_type AS type,'RemediationAction'::text AS object,
+                 decided_at AS at,reason AS note,object_id::text AS "objectId",
+                 from_state AS "fromState",to_state AS "toState",decided_by AS "decidedBy",metadata
+          FROM decision_logs
+          WHERE object_type='RemediationAction' AND object_id::text = ANY(${actionIds})
+          ORDER BY decided_at DESC
+          LIMIT 1000
+        `
+      : [];
+
     const verifications=actionIds.length
       ? await sql`
           SELECT id::text,action_id::text AS "actionId",verifier AS "verifierPersonaId",
@@ -239,8 +262,8 @@ export default async function handler(req,res){
       state:{
         meta:{demo:false,version:"1.0",dataMode:"normalized"},
         org,frameworks,requirements,sources,draftRequirements,draftReviewEvents,assessments,ra,
-        evidence,revisions,links:evidenceLinks,proposals,findings,responses,actions,verifications,
-        notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:assessmentLogs
+        evidence,revisions,links:evidenceLinks,proposals,findings,responses,actions,actionChangeRequests,verifications,
+        notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:[...assessmentLogs,...actionLogs].sort((a,b)=>new Date(b.at)-new Date(a.at))
       }
     });
   }catch(error){
