@@ -134,6 +134,8 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -f db/migrations/005_ai_obligation_intelligence.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/006_ai_review_audit.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/007_finding_remediation_model.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/008_action_change_governance.sql
       - name: Verify migrated objects
         run: |
           psql -v ON_ERROR_STOP=1 <<'SQL'
