@@ -25,6 +25,37 @@ async function findingContext(sql,findingId){
   return rows[0]||null;
 }
 
+async function draftAuditRow(sql,id){
+  const rows=await sql`
+    SELECT id::text,review_status AS "reviewStatus",ai_generated AS "aiGenerated",
+           ai_confidence AS "aiConfidence",ai_engine AS "aiEngine",ai_schema_version AS "aiSchemaVersion",
+           ai_review_reasons AS "aiReviewReasons",ai_uncertainties AS uncertainties
+    FROM draft_requirements
+    WHERE id=${id}::uuid
+  `;
+  return rows[0]||null;
+}
+
+async function recordDraftDecision(sql,user,row,decisionType,fromState,toState,reason=null,extra={}){
+  if(!row?.id)return;
+  const metadata={
+    aiGenerated:Boolean(row.aiGenerated),
+    aiConfidence:row.aiConfidence==null?null:Number(row.aiConfidence),
+    aiEngine:row.aiEngine||null,
+    aiSchemaVersion:row.aiSchemaVersion||null,
+    aiReviewReasons:Array.isArray(row.aiReviewReasons)?row.aiReviewReasons:[],
+    uncertainties:Array.isArray(row.uncertainties)?row.uncertainties:[],
+    ...extra
+  };
+  await sql`
+    INSERT INTO decision_logs
+      (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
+    VALUES
+      (${crypto.randomUUID()}::uuid,'DraftRequirement',${row.id}::uuid,${decisionType},
+       ${fromState||null},${toState||null},${reason||null},${user.id},now(),${JSON.stringify(metadata)}::jsonb,'compliance-app')
+  `;
+}
+
 async function actionContext(sql,actionId){
   const rows=await sql`
     SELECT a.id::text,a.owner_identity_id AS "ownerIdentityId",a.finding_id::text AS "findingId",
@@ -307,6 +338,8 @@ export default async function handler(req,res){
 
     if(command==="draftRequirement.update"){
       assertPermission(user,"manage_framework");
+      const before=await draftAuditRow(sql,p.id);
+      if(!before||before.reviewStatus==="published")return res.status(404).json({ok:false,error:"DRAFT_REQUIREMENT_NOT_EDITABLE"});
       const rows=await sql`
         UPDATE draft_requirements SET
           obligation=COALESCE(${p.obligation||null},obligation),
@@ -320,6 +353,9 @@ export default async function handler(req,res){
         RETURNING id::text,review_status AS "reviewStatus"
       `;
       if(!rows.length)return res.status(404).json({ok:false,error:"DRAFT_REQUIREMENT_NOT_EDITABLE"});
+      const changedFields=["obligation","sourceClause","applicability","obligationType","expectedEvidence","testProcedure"].filter(k=>p[k]!==undefined);
+      await recordDraftDecision(sql,user,before,before.aiGenerated?"human_edit_ai_draft":"edit_draft",
+        before.reviewStatus,before.reviewStatus,p.reviewNote||null,{changedFields});
       return res.status(200).json({ok:true,record:rows[0]});
     }
 
@@ -328,13 +364,23 @@ export default async function handler(req,res){
       const ids=Array.isArray(p.ids)?p.ids.filter(Boolean):[];
       const status=["accepted","rejected","draft"].includes(p.status)?p.status:"draft";
       if(!ids.length)return res.status(400).json({ok:false,error:"NO_DRAFT_REQUIREMENTS"});
+      const beforeRows=await sql`
+        SELECT id::text,review_status AS "reviewStatus",ai_generated AS "aiGenerated",
+               ai_confidence AS "aiConfidence",ai_engine AS "aiEngine",ai_schema_version AS "aiSchemaVersion",
+               ai_review_reasons AS "aiReviewReasons",ai_uncertainties AS uncertainties
+        FROM draft_requirements WHERE id::text = ANY(${ids}) AND review_status<>'published'
+      `;
       await sql`
         UPDATE draft_requirements
         SET review_status=${status},reviewed_by=${user.id},
             reviewed_at=CASE WHEN ${status}='draft' THEN NULL ELSE now() END,updated_at=now()
-        WHERE id::text = ANY(${ids})
+        WHERE id::text = ANY(${ids}) AND review_status<>'published'
       `;
-      return res.status(200).json({ok:true,status,count:ids.length});
+      for(const row of beforeRows){
+        await recordDraftDecision(sql,user,row,row.aiGenerated?"human_review_ai_draft":"review_draft",
+          row.reviewStatus,status,p.reviewNote||null,{batch:ids.length>1});
+      }
+      return res.status(200).json({ok:true,status,count:beforeRows.length});
     }
 
     if(command==="draftRequirement.publishBatch"){
@@ -347,7 +393,10 @@ export default async function handler(req,res){
       const drafts=await sql`
         SELECT id::text,source_id::text AS "sourceId",source_clause AS "sourceClause",original_text AS "originalText",
                obligation,applicability,obligation_type AS "obligationType",mandatory_level AS "mandatoryLevel",
-               expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure"
+               expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure",
+               review_status AS "reviewStatus",ai_generated AS "aiGenerated",ai_confidence AS "aiConfidence",
+               ai_engine AS "aiEngine",ai_schema_version AS "aiSchemaVersion",
+               ai_review_reasons AS "aiReviewReasons",ai_uncertainties AS uncertainties
         FROM draft_requirements
         WHERE id::text = ANY(${ids}) AND review_status='accepted'
         ORDER BY created_at,id
@@ -376,6 +425,7 @@ export default async function handler(req,res){
         `;
         await sql`INSERT INTO framework_requirements(framework_id,requirement_id) VALUES(${p.frameworkId}::uuid,${rid}::uuid)`;
         await sql`UPDATE draft_requirements SET review_status='published',reviewed_by=${user.id},reviewed_at=now(),updated_at=now() WHERE id=${d.id}::uuid`;
+        await recordDraftDecision(sql,user,d,"publish_reviewed_obligation","accepted","published",p.reviewNote||null,{requirementId:rid,code});
         created.push({id:rid,code});
       }
       await sql`UPDATE compliance_frameworks SET status='pending_approval',updated_at=now() WHERE id=${p.frameworkId}::uuid`;
@@ -385,11 +435,15 @@ export default async function handler(req,res){
     if(command==="draftRequirement.review"){
       assertPermission(user,"manage_framework");
       const status=["accepted","rejected","draft"].includes(p.status)?p.status:"draft";
+      const before=await draftAuditRow(sql,p.id);
+      if(!before||before.reviewStatus==="published")return res.status(404).json({ok:false,error:"DRAFT_REQUIREMENT_NOT_EDITABLE"});
       await sql`
         UPDATE draft_requirements SET review_status=${status},reviewed_by=${user.id},
             reviewed_at=CASE WHEN ${status}='draft' THEN NULL ELSE now() END,updated_at=now()
-        WHERE id=${p.id}::uuid
+        WHERE id=${p.id}::uuid AND review_status<>'published'
       `;
+      await recordDraftDecision(sql,user,before,before.aiGenerated?"human_review_ai_draft":"review_draft",
+        before.reviewStatus,status,p.reviewNote||null,{batch:false});
       return res.status(200).json({ok:true,status});
     }
 
