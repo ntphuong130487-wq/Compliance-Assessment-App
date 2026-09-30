@@ -42,7 +42,7 @@ const checks=[
   ["Clerk UI integration",html.includes("/api/auth/config")&&html.includes("/api/auth/me")&&html.includes("Đăng nhập bằng email")&&html.includes("openClerkSignIn")],
   ["Clerk script initialization",html.includes("data-clerk-publishable-key")&&html.includes("Clerk.load")],
   ["production login gate",html.includes("Đăng nhập để tiếp tục")&&html.includes('dataModeRuntime==="normalized"&&!currentUser')],
-  ["internal invitation management",html.includes("/api/admin/users")&&html.includes("Gửi lời mời email")&&html.includes("Quản lý thành viên")],
+  ["internal member provisioning",html.includes("/api/admin/users")&&html.includes("Cấp quyền email")&&html.includes("Quản lý thành viên")],
   ["admin operations settings",html.includes("Cấu hình vận hành")&&html.includes("saveNotifySettings")&&html.includes("reminderBeforeDueDays")],
   ["page filters",html.includes("assessmentStatusFilter")&&html.includes("findingSeverityFilter")&&html.includes("actionOwnerFilter")]
 ];
