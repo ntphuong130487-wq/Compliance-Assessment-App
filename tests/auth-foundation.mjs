@@ -1,3 +1,6 @@
+import fs from "node:fs";
+function read(p){return fs.readFileSync(p,"utf8")}
+
 process.env.AUTH_MODE="clerk";
 process.env.CLERK_PUBLISHABLE_KEY="pk_test_dGVzdC5jbGVyay5hY2NvdW50cy5kZXYk";
 process.env.CLERK_SECRET_KEY="sk_test_example";
