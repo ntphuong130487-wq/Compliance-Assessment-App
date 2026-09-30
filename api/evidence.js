@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { put, get } from "@vercel/blob";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { clerkConfigured, userContext } from "../lib/clerk-auth.js";
 import { normalizedMode, sqlClient } from "../lib/db.js";
 import { assertOrgScope, hasPermission } from "../lib/server-authz.js";
@@ -70,8 +71,8 @@ async function streamEvidence(req,res,session){
   if(ctx.fileSize)res.setHeader("Content-Length",String(ctx.fileSize));
 
   const stream=result.stream;
-  if(typeof stream.pipe==="function")stream.pipe(res);
-  else Readable.fromWeb(stream).pipe(res);
+  const nodeStream=typeof stream.pipe==="function"?stream:Readable.fromWeb(stream);
+  await pipeline(nodeStream,res);
   return true;
 }
 
