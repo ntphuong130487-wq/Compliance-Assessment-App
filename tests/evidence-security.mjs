@@ -8,7 +8,8 @@ for(const term of [
   "Content-Security-Policy","Referrer-Policy",
   "BLOB_NOT_CONFIGURED","AUTH_REQUIRED","USER_NOT_PROVISIONED",
   "EVIDENCE_SCOPE_UNRESOLVED","EVIDENCE_BLOB_NOT_FOUND",
-  "NORMALIZED_TARGET_REQUIRED","TARGET_NOT_FOUND"
+  "NORMALIZED_TARGET_REQUIRED","TARGET_NOT_FOUND",
+  "REQUIREMENT_NOT_ASSIGNED_TO_USER","assign_assessment_work"
 ]) assert(src.includes(term),"Evidence security control missing: "+term);
 
 const uploadStart=src.indexOf('if(req.method!=="POST")');
@@ -47,3 +48,7 @@ assert(inlinePolicy>=0&&disposition>inlinePolicy,
   "Inline evidence must be restricted to explicit safe MIME types before response");
 assert(src.includes('"application/pdf"')&&src.includes('"image/png"')&&!src.includes('"image/svg+xml"'),
   "Active document types must not be allowed inline");
+
+const assignmentCheck=src.indexOf("REQUIREMENT_NOT_ASSIGNED_TO_USER");
+assert(assignmentCheck>scopePos&&assignmentCheck<bodyPos,
+  "Requirement assignment must be enforced before reading evidence upload body");
