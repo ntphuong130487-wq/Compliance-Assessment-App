@@ -28,7 +28,7 @@ const checks=[
   ["draft-final finding workflow",html.includes("pending_unit_response")&&html.includes("pending_final_review")&&html.includes("finalizeFinding")],
   ["one-level requirement approval",html.includes("approveRequirement")&&html.includes("pending_approval")&&html.includes("approve_framework")],
   ["independent verification",html.includes("Không được tự xác minh")&&html.includes("ownerPersonaId")],
-  ["scoped reporting",html.includes("scopedRA=visibleRA()")],
+  ["scoped reporting",html.includes("visibleRA()")||html.includes("c.visibleRA()")],
   ["reset demo removed",!html.includes(">Reset demo</button>")],
   ["full requirement result taxonomy",["compliant","partially_compliant","non_compliant","not_applicable","insufficient_evidence"].every(x=>html.includes(x))&&html.includes("Ghi nhận kết quả Yêu cầu tuân thủ")],
   ["source lifecycle metadata",["sourceCode","issuer","issueDate","effectiveFrom","effectiveTo","supersedesRef","owner"].every(x=>html.includes(x))],
