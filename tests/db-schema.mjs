@@ -3,6 +3,7 @@ const schema=fs.readFileSync("db/schema.sql","utf8");
 const migration=fs.readFileSync("db/migrations/002_p2_operational.sql","utf8");
 const clerkMigration=fs.readFileSync("db/migrations/003_clerk_neon_auth.sql","utf8");
 const aiMigration=fs.readFileSync("db/migrations/005_ai_obligation_intelligence.sql","utf8");
+const auditMigration=fs.readFileSync("db/migrations/006_ai_review_audit.sql","utf8");
 function assert(ok,msg){if(!ok)throw new Error(msg)}
 for(const name of ["app_users","user_org_scopes","notifications","user_notification_reads"]){
   assert(schema.includes("CREATE TABLE IF NOT EXISTS "+name),"Canonical schema missing "+name);
@@ -17,4 +18,9 @@ for(const col of ["ai_generated","ai_confidence","ai_engine","ai_schema_version"
   assert(aiMigration.includes(col),"AI migration missing "+col);
 }
 assert(aiMigration.includes("chk_draft_requirements_ai_confidence"),"AI confidence constraint missing");
-console.log("PASS - normalized schema + Clerk + AI obligation metadata readiness");
+for(const col of ["metadata","source"]){
+  assert(schema.includes(col),"Canonical decision log missing "+col);
+  assert(auditMigration.includes(col),"AI review audit migration missing "+col);
+}
+assert(auditMigration.includes("idx_decision_draft_review"),"AI review audit index missing");
+console.log("PASS - normalized schema + Clerk + AI obligation metadata + human-review audit readiness");
