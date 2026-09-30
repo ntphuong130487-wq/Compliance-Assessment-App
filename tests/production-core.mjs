@@ -3,7 +3,7 @@ import fs from "node:fs";
 function read(p){return fs.readFileSync(p,"utf8")}
 function assert(ok,msg){if(!ok)throw new Error(msg)}
 
-const html=read("index.html")+"\n"+read("src/app.js");
+const html=read("index.html")+"\n"+read("src/app.js")+"\n"+read("src/workflows/action-governance.js");
 const bootstrap=read("api/v1/bootstrap.js");
 const commands=read("api/v1/commands.js");
 const evidence=read("api/evidence.js");
