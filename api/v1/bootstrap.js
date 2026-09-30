@@ -152,7 +152,10 @@ export default async function handler(req,res){
           SELECT id::text,source_id::text AS "sourceId",source_clause AS "sourceClause",original_text AS "originalText",
                  obligation,applicability,obligation_type AS "obligationType",mandatory_level AS "mandatoryLevel",
                  expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure",
-                 review_status AS "reviewStatus",reviewed_by AS "reviewedBy",reviewed_at AS "reviewedAt"
+                 review_status AS "reviewStatus",reviewed_by AS "reviewedBy",reviewed_at AS "reviewedAt",
+                 ai_generated AS "aiGenerated",ai_confidence AS "aiConfidence",ai_engine AS "aiEngine",
+                 ai_schema_version AS "aiSchemaVersion",ai_field_confidence AS "fieldConfidence",
+                 ai_review_reasons AS "aiReviewReasons",ai_uncertainties AS uncertainties
           FROM draft_requirements ORDER BY created_at DESC
         `
       : [];
