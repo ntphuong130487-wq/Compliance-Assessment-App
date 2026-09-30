@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
-import { put } from "@vercel/blob";
+import { put, get } from "@vercel/blob";
+import { Readable } from "node:stream";
 import { clerkConfigured, userContext } from "../lib/clerk-auth.js";
 import { normalizedMode, sqlClient } from "../lib/db.js";
 import { assertOrgScope, hasPermission } from "../lib/server-authz.js";
@@ -7,6 +8,72 @@ import { assertOrgScope, hasPermission } from "../lib/server-authz.js";
 export const config = { api: { bodyParser: false } };
 
 const MAX_BYTES = 8 * 1024 * 1024;
+
+
+async function revisionContext(sql,revisionId){
+  const rows=await sql`
+    SELECT r.id::text AS "revisionId",r.file_uri AS "fileUri",r.original_filename AS "originalFilename",
+           r.mime_type AS "mimeType",r.file_size AS "fileSize",r.sha256,
+           e.id::text AS "evidenceId",e.org_unit_id::text AS "orgId",e.status,
+           COUNT(l.id)::int AS "linkCount"
+    FROM evidence_revisions r
+    JOIN evidence e ON e.id=r.evidence_id
+    LEFT JOIN evidence_links l ON l.evidence_revision_id=r.id
+    WHERE r.id=${revisionId}::uuid
+    GROUP BY r.id,e.id
+  `;
+  return rows[0]||null;
+}
+
+function blobPathname(fileUri){
+  try{
+    const u=new URL(fileUri);
+    const raw=u.pathname.replace(/^\/+/, "");
+    try{return decodeURIComponent(raw)}catch(_){return raw}
+  }catch(_){
+    return String(fileUri||"").replace(/^\/+/, "");
+  }
+}
+
+function contentDisposition(filename,mode){
+  const name=String(filename||"evidence.bin").replace(/[\r\n"]/g,"_");
+  const ascii=name.replace(/[^\x20-\x7E]/g,"_");
+  const kind=mode==="download"?"attachment":"inline";
+  return kind+'; filename="'+ascii+'"; filename*=UTF-8\'\''+encodeURIComponent(name);
+}
+
+async function streamEvidence(req,res,session){
+  if(!normalizedMode())return res.status(409).json({ok:false,error:"NORMALIZED_MODE_REQUIRED"});
+  const revisionId=String(req.query?.revisionId||"");
+  if(!revisionId)return null;
+  const sql=sqlClient();
+  const ctx=await revisionContext(sql,revisionId);
+  if(!ctx||ctx.status!=="active")return res.status(404).json({ok:false,error:"EVIDENCE_NOT_FOUND"});
+  if(!ctx.orgId)return res.status(403).json({ok:false,error:"EVIDENCE_SCOPE_UNRESOLVED"});
+  assertOrgScope(session,ctx.orgId);
+  if(!ctx.fileUri)return res.status(404).json({ok:false,error:"EVIDENCE_FILE_MISSING"});
+
+  const pathname=blobPathname(ctx.fileUri);
+  if(!pathname)return res.status(404).json({ok:false,error:"EVIDENCE_PATH_MISSING"});
+  const options={access:"private",useCache:false};
+  if(process.env.BLOB_READ_WRITE_TOKEN)options.token=process.env.BLOB_READ_WRITE_TOKEN;
+  const result=await get(pathname,options);
+  if(!result||!result.stream)return res.status(404).json({ok:false,error:"EVIDENCE_BLOB_NOT_FOUND"});
+
+  const mode=String(req.query?.mode||"inline")==="download"?"download":"inline";
+  const contentType=result.blob?.contentType||ctx.mimeType||"application/octet-stream";
+  res.statusCode=200;
+  res.setHeader("Content-Type",contentType);
+  res.setHeader("Content-Disposition",contentDisposition(ctx.originalFilename,mode));
+  res.setHeader("X-Content-Type-Options","nosniff");
+  res.setHeader("Cache-Control","private, no-store");
+  if(ctx.fileSize)res.setHeader("Content-Length",String(ctx.fileSize));
+
+  const stream=result.stream;
+  if(typeof stream.pipe==="function")stream.pipe(res);
+  else Readable.fromWeb(stream).pipe(res);
+  return true;
+}
 
 async function targetContext(sql,targetType,targetId){
   if(targetType==="RequirementAssessment"){
@@ -52,13 +119,30 @@ export default async function handler(req,res){
   res.setHeader("Cache-Control","no-store");
 
   if(req.method==="GET"){
-    return res.status(200).json({
-      ok:true,
-      configured:Boolean(process.env.BLOB_STORE_ID||process.env.BLOB_READ_WRITE_TOKEN),
-      authConfigured:clerkConfigured(),
-      authMode:process.env.BLOB_READ_WRITE_TOKEN?"token":"oidc",
-      maxBytes:MAX_BYTES
-    });
+    const revisionId=String(req.query?.revisionId||"");
+    if(!revisionId){
+      return res.status(200).json({
+        ok:true,
+        configured:Boolean(process.env.BLOB_STORE_ID||process.env.BLOB_READ_WRITE_TOKEN),
+        authConfigured:clerkConfigured(),
+        authMode:process.env.BLOB_READ_WRITE_TOKEN?"token":"oidc",
+        maxBytes:MAX_BYTES,
+        privateRead:true
+      });
+    }
+    if(!process.env.BLOB_STORE_ID&&!process.env.BLOB_READ_WRITE_TOKEN){
+      return res.status(503).json({ok:false,error:"BLOB_NOT_CONFIGURED"});
+    }
+    if(!clerkConfigured())return res.status(403).json({ok:false,error:"AUTH_NOT_CONFIGURED"});
+    const session=await userContext(req);
+    if(!session)return res.status(401).json({ok:false,error:"AUTH_REQUIRED"});
+    if(!session.provisioned||session.status!=="active")return res.status(403).json({ok:false,error:"USER_NOT_PROVISIONED"});
+    try{
+      return await streamEvidence(req,res,session);
+    }catch(error){
+      console.error("evidence read error",error);
+      return res.status(Number(error?.status||500)).json({ok:false,error:error?.code||"EVIDENCE_READ_ERROR"});
+    }
   }
 
   if(req.method!=="POST"){
