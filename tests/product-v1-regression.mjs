@@ -11,6 +11,7 @@ const css=read("src/styles/product-v1.css");
 const commands=read("api/v1/commands.js");
 const authz=read("lib/server-authz.js");
 const users=read("lib/user-routes.js");
+const actionGovernance=read("src/workflows/action-governance.js");
 
 for(const asset of ["/src/styles/product-v1.css","/src/ui/product-ui.js"]){
   assert(index.includes(asset),"Missing product asset "+asset);
@@ -75,7 +76,19 @@ for(const control of [
   "ASSESSMENT_FIELDWORK_NOT_ACTIVE",
   "REMEDIATION_REQUIREMENT_REQUIRED",
   "MANDATORY_REMEDIATION_ACTION_REQUIRED",
-  "MANDATORY_ACTION_NOT_REQUIRED"
+  "MANDATORY_ACTION_NOT_REQUIRED",
+  "ACTION_PROGRESS_NOT_EDITABLE",
+  "INVALID_ACTION_PROGRESS",
+  "ACTION_PROGRESS_NOTE_REQUIRED",
+  "ACTION_DUE_DATE_NOT_EDITABLE",
+  "VALID_REQUESTED_DUE_DATE_REQUIRED",
+  "DUE_DATE_CHANGE_REASON_REQUIRED",
+  "DUE_DATE_UNCHANGED",
+  "DUE_DATE_CHANGE_ALREADY_PENDING",
+  "INVALID_DUE_DATE_DECISION",
+  "DUE_DATE_DECISION_NOTE_REQUIRED",
+  "ACTION_CHANGE_REQUEST_NOT_PENDING",
+  "SELF_APPROVAL_FORBIDDEN"
 ]){
   assert(commands.includes(control),"Business lifecycle control missing "+control);
 }
@@ -92,5 +105,14 @@ assert(app.includes("remediationRequired")&&app.includes("remediationRequirement
   "Recommendation/remediation distinction missing in workflow");
 assert(screens.includes("Yêu cầu khắc phục bắt buộc")&&screens.includes("Khắc phục bắt buộc"),
   "Recommendation/remediation distinction missing in product screens");
+for(const command of ["action.updateProgress","action.requestDueDateChange","action.decideDueDateChange"]){
+  assert(commands.includes(command),"Action governance command missing "+command);
+}
+for(const fn of ["updateProgress","requestDueDateChange","decideDueDateChange"]){
+  assert(actionGovernance.includes(fn),"Action governance workflow missing "+fn);
+}
+assert(screens.includes("Đổi hạn chờ duyệt")&&screens.includes("Cập nhật")&&screens.includes("Đề nghị đổi hạn"),
+  "Action governance UX missing");
+assert(index.includes("/src/workflows/action-governance.js"),"Action governance module not loaded");
 
 console.log("PASS - Product v1 UI + business regression controls");
