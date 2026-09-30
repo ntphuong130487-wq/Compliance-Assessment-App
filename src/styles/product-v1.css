@@ -117,3 +117,64 @@ table tbody tr:hover{background:#f7faf8}
   .screen-fieldwork .content>.split{grid-template-columns:1fr}
   .screen-frameworks .source-modes{grid-template-columns:1fr}
 }
+
+/* Product v1.1 — Evidence / Finding timeline / Action aging / AI review */
+.fieldwork-layout{grid-template-columns:minmax(280px,.72fr) minmax(0,1.55fr);align-items:start}
+.fieldwork-detail h2{margin:0 0 6px;font-size:18px}
+.requirement-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 16px}
+.requirement-meta>div{padding:12px;border:1px solid var(--product-line);border-radius:12px;background:#f8faf8}
+.requirement-meta b{font-size:12px;color:#52665e}
+.requirement-meta p{margin:5px 0 0;font-size:13px}
+.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:10px 0}
+.evidence-card{display:flex;gap:10px;align-items:center;border:1px solid var(--product-line);border-radius:12px;padding:11px;background:#fff}
+.evidence-type{width:46px;height:46px;display:grid;place-items:center;border-radius:10px;background:#edf5f0;color:#0b5c3b;font-size:10px;font-weight:900}
+.evidence-body{min-width:0}
+.evidence-body b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.evidence-drop{margin:10px 0 14px;border-style:dashed;background:#fbfcfb}
+.ai-panel{margin-top:14px;padding-top:12px;border-top:1px solid var(--product-line)}
+.finding-v1{margin-bottom:14px}
+.finding-timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:16px 0;padding:12px 8px;background:#f7faf8;border-radius:12px}
+.timeline-step{position:relative;display:flex;gap:8px;align-items:flex-start;padding:0 8px;min-width:0}
+.timeline-step:not(:last-child):after{content:"";position:absolute;left:31px;right:-8px;top:12px;height:2px;background:#dce5df;z-index:0}
+.timeline-step.done:not(:last-child):after{background:#79b491}
+.timeline-dot{position:relative;z-index:1;flex:0 0 24px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#e7ece8;color:#64736c;font-size:11px;font-weight:900}
+.timeline-step.done .timeline-dot{background:#dff1e6;color:#0b6b42}
+.timeline-step.active .timeline-dot{box-shadow:0 0 0 4px rgba(11,92,59,.12)}
+.timeline-step b{display:block;font-size:11px}
+.timeline-step small{display:block;color:var(--product-muted);font-size:10px;margin-top:3px}
+.finding-facts{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.finding-facts>div{padding:11px;border:1px solid var(--product-line);border-radius:11px;background:#fff}
+.finding-facts b{font-size:11px;color:#53675e}
+.finding-facts p{font-size:12px;margin:4px 0 0}
+.finding-response{margin-top:12px}
+.finding-actions{margin-top:12px;border-top:1px solid var(--product-line);padding-top:10px}
+.aging-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:0 0 14px}
+.aging-cell{border:1px solid var(--product-line);border-radius:12px;background:#fff;padding:10px 12px}
+.aging-cell b{font-size:22px;color:var(--product-ink);display:block}
+.aging-cell span{font-size:11px;color:var(--product-muted)}
+.aging-cell.danger{border-left:3px solid var(--product-danger)}
+.aging-cell.warning{border-left:3px solid #d39a31}
+.aging-cell.info{border-left:3px solid var(--product-blue)}
+.aging-pill{display:inline-block;margin-top:5px;padding:3px 7px;border-radius:999px;background:#eef2ef;color:#53665e;font-size:10px}
+.aging-pill.danger{background:#fae7e5;color:#8f3029}
+.aging-pill.warning{background:#fff2d7;color:#8b611b}
+.aging-pill.info{background:#e8f3fa;color:#155a7e}
+.obligation-intel{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.confidence-chip,.human-review-chip{display:inline-flex;align-items:center;border-radius:999px;padding:4px 7px;font-size:10px;font-weight:800}
+.confidence-chip.positive{background:#e2f3e8;color:#0b6b42}
+.confidence-chip.warning{background:#fff2d6;color:#886019}
+.confidence-chip.danger{background:#fae4e2;color:#94352e}
+.confidence-chip.info{background:#e5f1f7;color:#155a7e}
+.confidence-chip.neutral{background:#edf0ee;color:#617069}
+.human-review-chip{background:#f1eafd;color:#654295}
+.confidence-bar{height:5px;border-radius:6px;background:#e7ece8;overflow:hidden;margin:6px 0 8px}
+.confidence-bar i{display:block;height:100%;background:linear-gradient(90deg,#d49a31,#1a8b58)}
+.framework-block{margin-top:14px}
+.product-toolbar{gap:8px;flex-wrap:wrap}
+@media(max-width:860px){
+  .fieldwork-layout,.requirement-meta,.finding-facts{grid-template-columns:1fr}
+  .evidence-grid{grid-template-columns:1fr}
+  .finding-timeline{grid-template-columns:1fr;gap:8px}
+  .timeline-step:not(:last-child):after{display:none}
+  .aging-strip{grid-template-columns:repeat(2,1fr)}
+}
