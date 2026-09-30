@@ -1,7 +1,7 @@
 name: Compliance MVP QA
 on:
   push:
-    branches: [main]
+    branches: [main, feature/product-v1-ui-ai]
   pull_request:
 jobs:
   qa:
@@ -25,6 +25,10 @@ jobs:
         run: node tests/db-schema.mjs
       - name: Run Production Core QA
         run: node tests/production-core.mjs
+      - name: Run Product v1 business regression
+        run: node tests/product-v1-regression.mjs
+      - name: Run OCR and AI foundation QA
+        run: node tests/intelligence-foundation.mjs
       - name: Check application syntax
         run: |
           node --check access-control.js
@@ -38,6 +42,9 @@ jobs:
           node --check lib/user-routes.js
           node --check api/evidence.js
           node --check lib/obligation-extractor.js
+          node --check lib/document-intelligence.js
+          node --check lib/ai-obligation-extractor.js
+          node --check src/ui/product-ui.js
           node --check api/obligations/extract.js
           node --check api/source/extract.js
           node --check api/regulations/search.js
