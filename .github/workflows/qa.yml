@@ -75,6 +75,7 @@ jobs:
           node --check src/screens/actions.js
           node --check src/screens/reports.js
           node --check src/screens/settings.js
+          node --check src/workflows/action-governance.js
           node --check api/obligations/extract.js
           node --check api/source/extract.js
           node --check api/regulations/search.js
@@ -128,6 +129,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/005_ai_obligation_intelligence.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/006_ai_review_audit.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/007_finding_remediation_model.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/008_action_change_governance.sql
       - name: Verify migration idempotence
         run: |
           psql -v ON_ERROR_STOP=1 -f db/migrations/005_ai_obligation_intelligence.sql
@@ -162,5 +164,12 @@ jobs:
             IF NOT EXISTS (
               SELECT 1 FROM pg_constraint WHERE conname='chk_remediation_action_type'
             ) THEN RAISE EXCEPTION 'remediation action type constraint missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_name='remediation_action_change_requests'
+            ) THEN RAISE EXCEPTION 'remediation_action_change_requests missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_indexes WHERE indexname='ux_action_pending_due_change'
+            ) THEN RAISE EXCEPTION 'pending due-date request unique index missing'; END IF;
           END $$;
           SQL
