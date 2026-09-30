@@ -1,4 +1,7 @@
+import crypto from "node:crypto";
 import { extractObligations } from "../../lib/obligation-extractor.js";
+import { normalizedMode, sqlClient, asUuid } from "../../lib/db.js";
+import { requireUser, assertPermission } from "../../lib/server-authz.js";
 
 export const config={api:{bodyParser:false}};
 const MAX_BYTES=8*1024*1024;
@@ -52,11 +55,48 @@ export default async function handler(req,res){
     const name=decodeURIComponent(String(req.headers["x-file-name"]||"source"));
     const type=String(req.headers["content-type"]||"application/octet-stream");
     const text=await extractText(body,name,type);
-    const obligations=extractObligations(text,req.headers["x-source-id"]||null);
+    if(!String(text||"").trim()||String(text).trim().length<20){
+      return res.status(422).json({ok:false,error:"OCR_REQUIRED",ocrRequired:true,name,type});
+    }
+    let sourceId=String(req.headers["x-source-id"]||"");
+    let obligations=extractObligations(text,sourceId||null);
+
+    if(normalizedMode()){
+      const auth=await requireUser(req);
+      if(!auth.ok)return res.status(auth.status).json({ok:false,error:auth.error});
+      assertPermission(auth.user,"manage_framework");
+      if(!asUuid(sourceId))return res.status(400).json({ok:false,error:"VALID_SOURCE_ID_REQUIRED"});
+      const sql=sqlClient();
+      const exists=await sql`SELECT id::text FROM compliance_sources WHERE id=${sourceId}::uuid`;
+      if(!exists.length)return res.status(404).json({ok:false,error:"SOURCE_NOT_FOUND"});
+      await sql`DELETE FROM draft_requirements WHERE source_id=${sourceId}::uuid AND review_status<>'published'`;
+      const persisted=[];
+      for(const o of obligations){
+        const id=crypto.randomUUID();
+        await sql`
+          INSERT INTO draft_requirements
+            (id,source_id,source_clause,original_text,obligation,applicability,obligation_type,
+             mandatory_level,expected_evidence,test_procedure,review_status,created_at,updated_at)
+          VALUES
+            (${id}::uuid,${sourceId}::uuid,${o.sourceClause||null},${o.originalText||null},${o.obligation},
+             ${o.applicability||null},${o.obligationType||"general"},${o.mandatoryLevel||"review"},
+             ${o.expectedEvidence||null},${o.testProcedure||null},'draft',now(),now())
+        `;
+        persisted.push({...o,id,sourceId});
+      }
+      await sql`
+        UPDATE compliance_sources SET status='extracted',original_filename=${name},mime_type=${type},
+          extracted_at=now(),updated_at=now()
+        WHERE id=${sourceId}::uuid
+      `;
+      obligations=persisted;
+    }
+
     return res.status(200).json({
       ok:true,name,type,text:text.slice(0,250000),
       count:obligations.length,obligations,
-      engine:"file-text+rule-v0.1"
+      engine:"file-text+rule-v0.2",
+      persisted:normalizedMode()
     });
   }catch(error){
     if(error?.code==="FILE_TOO_LARGE")return res.status(413).json({ok:false,error:"FILE_TOO_LARGE"});
