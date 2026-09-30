@@ -4,7 +4,7 @@ import { clerkConfigured } from "../lib/clerk-auth.js";
 export default async function handler(req,res){
   res.setHeader("Cache-Control","no-store");
   const databaseConfigured=Boolean(process.env.DATABASE_URL);
-  let normalizedReady=false,stateStoreReady=false,dbError=null;
+  let normalizedReady=false,productionCoreReady=false,stateStoreReady=false,dbError=null;
   if(databaseConfigured){
     try{
       const sql=neon(process.env.DATABASE_URL);
@@ -17,6 +17,16 @@ export default async function handler(req,res){
       `;
       stateStoreReady=Boolean(rows[0]?.state_store);
       normalizedReady=Boolean(rows[0]?.normalized_ready);
+      if(normalizedReady){
+        const core=await sql`
+          SELECT
+            to_regclass('public.draft_requirements') IS NOT NULL AS draft_requirements,
+            to_regclass('public.unit_responses') IS NOT NULL AS unit_responses,
+            to_regclass('public.assessment_assignments') IS NOT NULL AS assignments,
+            to_regclass('public.evidence_links') IS NOT NULL AS evidence_links
+        `;
+        productionCoreReady=Object.values(core[0]||{}).every(Boolean);
+      }
     }catch(e){dbError="DATABASE_CHECK_FAILED"}
   }
   const missing=[];
@@ -27,11 +37,11 @@ export default async function handler(req,res){
   if(process.env.DATA_MODE!=="normalized")missing.push("DATA_MODE=normalized");
   res.status(200).json({
     ok:true,
-    version:"0.7.0",
-    productionReady:clerkConfigured()&&databaseConfigured&&normalizedReady&&Boolean(process.env.BLOB_READ_WRITE_TOKEN)&&process.env.DATA_MODE==="normalized",
+    version:"0.8.0",
+    productionReady:clerkConfigured()&&databaseConfigured&&normalizedReady&&productionCoreReady&&Boolean(process.env.BLOB_READ_WRITE_TOKEN)&&process.env.DATA_MODE==="normalized",
     missing,
     auth:{configured:clerkConfigured(),mode:process.env.AUTH_MODE||null,provider:process.env.AUTH_MODE==="clerk"?"Clerk":null,invitationOnly:true},
-    database:{configured:databaseConfigured,stateStoreReady,normalizedReady,dataMode:process.env.DATA_MODE||"shared-json",error:dbError},
+    database:{configured:databaseConfigured,stateStoreReady,normalizedReady,productionCoreReady,dataMode:process.env.DATA_MODE||"shared-json",error:dbError},
     storage:{configured:Boolean(process.env.BLOB_READ_WRITE_TOKEN),provider:process.env.BLOB_READ_WRITE_TOKEN?"Vercel Blob":null},
     search:{regulationProviderConfigured:Boolean(process.env.REGULATION_SEARCH_PROVIDER)},
     ai:{configured:Boolean(process.env.AI_GATEWAY_API_KEY&&process.env.AI_EXTRACTION_MODEL)}
