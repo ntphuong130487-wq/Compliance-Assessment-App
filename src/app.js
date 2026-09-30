@@ -456,7 +456,8 @@ function assessmentLocalGate(aid){
   var scoped=S.findings.filter(function(f){var r=S.ra.find(function(x){return x.id===f.raId});return r&&r.assessmentId===aid});
   var pending=scoped.filter(function(f){return["draft","pending_unit_response","pending_final_review"].includes(f.status)}).length;
   var missingMandatory=scoped.filter(function(f){return f.status==="final"&&f.remediationRequired&&!S.actions.some(function(x){return x.findingId===f.id&&x.actionType==="mandatory_remediation"})}).length;
-  return{total:ras.length,done:done,pendingFindings:pending,mandatoryFindingsWithoutAction:missingMandatory};
+  var unassigned=ras.filter(function(r){return!(S.requirementAssignments||[]).some(function(x){return x.raId===r.id&&x.assignmentRole==="primary_assessor"&&x.status==="active"})}).length;
+  return{total:ras.length,done:done,pendingFindings:pending,mandatoryFindingsWithoutAction:missingMandatory,unassignedRequirements:unassigned};
 }
 async function startAssessment(aid){
   var a=S.assessments.find(function(x){return x.id===aid});if(!a)return;
@@ -465,6 +466,7 @@ async function startAssessment(aid){
       await apiCommand("assessment.startFieldwork",{assessmentId:aid});
     }else{
       var g=assessmentLocalGate(aid);if(a.status!=="draft"||g.total<1)throw new Error("ASSESSMENT_REQUIREMENTS_REQUIRED");
+      if(g.unassignedRequirements>0)throw new Error("ASSESSMENT_ASSIGNMENTS_INCOMPLETE");
       a.status="fieldwork";a.lockedAt=now();S.logs.push({id:id("log"),type:"start_fieldwork",object:"Assessment",at:now(),note:a.name+" · scope frozen"});save();
     }
     selectedAssessment=aid;selectedRA=null;view="fieldwork";render();
