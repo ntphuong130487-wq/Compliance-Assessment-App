@@ -29,9 +29,13 @@ assert(src.includes("await del(blob.url"),"Blob cleanup on DB transaction failur
 
 const readStart=src.indexOf('if(req.method==="GET")');
 const readAuth=src.indexOf("const session=await userContext(req)",readStart);
-const readScope=src.indexOf("assertOrgScope(session,ctx.orgId)",readAuth);
-const getBlob=src.indexOf("await get(pathname",readScope);
-assert(readAuth>readStart&&readScope>readAuth&&getBlob>readScope,
-  "Evidence read must authenticate and enforce org scope before private Blob read");
+const streamCall=src.indexOf("streamEvidence(req,res,session)",readAuth);
+assert(readAuth>readStart&&streamCall>readAuth,
+  "GET evidence route must authenticate before entering private stream handler");
+const streamStart=src.indexOf("async function streamEvidence");
+const streamScope=src.indexOf("assertOrgScope(session,ctx.orgId)",streamStart);
+const getBlob=src.indexOf("await get(pathname",streamScope);
+assert(streamScope>streamStart&&getBlob>streamScope,
+  "Private stream handler must enforce org scope before Blob read");
 
 console.log("PASS - evidence auth, org scope, atomicity and cleanup ordering");
