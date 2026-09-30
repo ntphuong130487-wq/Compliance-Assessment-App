@@ -13,12 +13,14 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
 endobj
 5 0 obj
-<< /Length 132 >>
+<< /Length 146 >>
 stream
 BT
 /F1 12 Tf
-50 750 Td
-(Don vi phai luu giu day du ho so va chung tu. Giao dich khong duoc thuc hien truoc khi co phe duyet.) Tj
+72 760 Td
+(Don vi phai luu giu day du ho so va chung tu.) Tj
+0 -20 Td
+(Giao dich khong duoc thuc hien truoc khi co phe duyet.) Tj
 ET
 endstream
 endobj
@@ -33,5 +35,5 @@ xref
 trailer
 << /Size 6 /Root 1 0 R >>
 startxref
-499
+513
 %%EOF
