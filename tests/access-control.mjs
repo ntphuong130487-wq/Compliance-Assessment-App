@@ -27,6 +27,7 @@ assert(A.can("confirm_finding"),"Admin must confirm finding");
 
 A.setPersona("p_manager");
 assert(A.can("approve_framework"),"Compliance manager must approve framework");
+assert(A.can("review_assessment"),"Compliance manager should review/close assessments");
 
 A.setPersona("p_assessor");
 assert(A.can("conduct_fieldwork",{assessment:{orgId:"agric"}}),"Assessor should work in assigned org");
@@ -35,6 +36,7 @@ assert(!A.can("confirm_finding",{assessment:{orgId:"agric"}}),"Assessor must not
 
 A.setPersona("p_reviewer");
 assert(A.can("verify_action"),"Reviewer should verify actions");
+assert(A.can("review_assessment"),"Reviewer should review/close assessments");
 
 A.setRuntimeUser({id:"user_real",role:"assessor",orgIds:["proc"],name:"Real User"});
 assert(A.can("conduct_fieldwork",{assessment:{orgId:"proc"}}),"Runtime Clerk user should inherit assigned org scope");
