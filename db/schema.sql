@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS decision_logs (
   id uuid PRIMARY KEY, object_type text NOT NULL, object_id uuid NOT NULL,
   decision_type text NOT NULL, from_state text, to_state text,
   reason text, decided_by text, decided_at timestamptz NOT NULL DEFAULT now(),
-  approval_ref text
+  approval_ref text, metadata jsonb, source text
 );
 
 CREATE INDEX IF NOT EXISTS idx_ra_assessment ON requirement_assessments(assessment_id);
@@ -330,3 +330,12 @@ CREATE INDEX IF NOT EXISTS idx_draft_requirements_ai_confidence
   WHERE ai_generated=true;
 CREATE INDEX IF NOT EXISTS idx_draft_requirements_ai_review
   ON draft_requirements(review_status, ai_generated, ai_confidence);
+
+
+-- Human review audit trail for draft obligations
+ALTER TABLE decision_logs
+  ADD COLUMN IF NOT EXISTS metadata jsonb,
+  ADD COLUMN IF NOT EXISTS source text;
+CREATE INDEX IF NOT EXISTS idx_decision_draft_review
+  ON decision_logs(object_type, object_id, decided_at DESC)
+  WHERE object_type='DraftRequirement';
