@@ -5,7 +5,8 @@ const css=fs.readFileSync("src/styles/app.css","utf8");
 const productCss=fs.readFileSync("src/styles/product-v1.css","utf8");
 const screens=["shared","dashboard","frameworks","assessments","fieldwork","findings","actions","reports","settings"]
   .map(x=>fs.readFileSync("src/screens/"+x+".js","utf8")).join("\n");
-const html=shell+"\n"+app+"\n"+css+"\n"+productCss+"\n"+screens;
+const workflows=fs.readFileSync("src/workflows/action-governance.js","utf8");
+const html=shell+"\n"+app+"\n"+css+"\n"+productCss+"\n"+screens+"\n"+workflows;
 const checks=[
   ["7 màn hình",["Điều hành","Khung tuân thủ","Chương trình đánh giá","Kiểm tra hiện trường","Phát hiện","Khắc phục","Báo cáo"].every(x=>html.includes(x))],
   ["human-in-the-loop",html.includes("AI chỉ đề xuất")&&html.includes("Tạo Phát hiện dự thảo")&&html.includes("Chốt Phát hiện")],
