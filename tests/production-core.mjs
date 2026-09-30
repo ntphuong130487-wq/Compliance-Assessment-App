@@ -28,6 +28,11 @@ for(const term of ["assertPermission","assertOrgScope","SELF_VERIFICATION_FORBID
 }
 assert(evidence.includes('target_type')&&evidence.includes('sha256')&&evidence.includes('assertOrgScope'),"Normalized evidence persistence incomplete");
 assert(evidence.includes('BLOB_STORE_ID')&&evidence.includes('authMode:process.env.BLOB_READ_WRITE_TOKEN?"token":"oidc"'),"OIDC/private Blob support missing");
+for(const term of ["revisionContext","contentDisposition","await get(pathname","assertOrgScope(session,ctx.orgId)","mode===\"download\""]){
+  assert(evidence.includes(term),"Private evidence read path missing "+term);
+}
+assert(commands.includes("recordDraftDecision")&&commands.includes("human_review_ai_draft")&&commands.includes("human_edit_ai_draft"),"AI human-review audit commands missing");
+assert(bootstrap.includes("draftReviewEvents")&&bootstrap.includes("DraftRequirement"),"Draft review audit bootstrap missing");
 assert(authz.includes("ORG_SCOPE_FORBIDDEN")&&authz.includes("ROLE_PERMISSIONS"),"Server authorization policy incomplete");
 for(const table of ["assessment_assignments","draft_requirements","unit_responses"]){
   assert(migration.includes("CREATE TABLE IF NOT EXISTS "+table),"Migration missing "+table);
