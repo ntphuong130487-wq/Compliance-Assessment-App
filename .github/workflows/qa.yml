@@ -35,6 +35,18 @@ jobs:
         run: node tests/screen-modules.mjs
       - name: Run real PDF DOCX scan OCR regression
         run: node tests/ocr-fixtures.mjs
+      - name: Install Chromium for browser regression
+        run: npx playwright install --with-deps chromium
+      - name: Run browser-level product regression
+        run: |
+          node tests/browser-server.mjs > /tmp/compliance-browser-server.log 2>&1 &
+          SERVER_PID=$!
+          trap "kill $SERVER_PID || true" EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:browser
       - name: Check application syntax
         run: |
           node --check access-control.js
@@ -72,3 +84,5 @@ jobs:
           node --check api/v1/commands.js
           node --check scripts/db-check.mjs
           node --check scripts/db-migrate.mjs
+          node --check tests/browser-server.mjs
+          node --check tests/browser-product.mjs
