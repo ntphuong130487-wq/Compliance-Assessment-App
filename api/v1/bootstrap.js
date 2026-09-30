@@ -160,6 +160,20 @@ export default async function handler(req,res){
         `
       : [];
 
+    const draftIds=draftRequirements.map(x=>x.id);
+    const draftReviewEvents=draftIds.length
+      ? await sql`
+          SELECT d.id::text,d.object_id::text AS "objectId",d.decision_type AS "decisionType",
+                 d.from_state AS "fromState",d.to_state AS "toState",d.reason,d.decided_by AS "decidedBy",
+                 d.decided_at AS "decidedAt",to_jsonb(d)->'metadata' AS metadata,
+                 to_jsonb(d)->>'source' AS source
+          FROM decision_logs d
+          WHERE d.object_type='DraftRequirement' AND d.object_id::text = ANY(${draftIds})
+          ORDER BY d.decided_at DESC
+          LIMIT 500
+        `
+      : [];
+
     const evidenceLinks=await sql`
       SELECT id::text,evidence_revision_id::text AS "revId",target_type AS "targetType",target_id::text AS "targetId",purpose
       FROM evidence_links
@@ -210,7 +224,7 @@ export default async function handler(req,res){
       ok:true,mode:"normalized",user,
       state:{
         meta:{demo:false,version:"1.0",dataMode:"normalized"},
-        org,frameworks,requirements,sources,draftRequirements,assessments,ra,
+        org,frameworks,requirements,sources,draftRequirements,draftReviewEvents,assessments,ra,
         evidence,revisions,links:evidenceLinks,proposals,findings,responses,actions,verifications,
         notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:[]
       }
