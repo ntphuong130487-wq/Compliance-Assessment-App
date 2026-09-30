@@ -69,6 +69,16 @@ export default async function handler(req,res){
       : [];
 
     const raIds=ra.map(x=>x.id);
+    const requirementAssignments=raIds.length
+      ? await sql`
+          SELECT id::text,requirement_assessment_id::text AS "raId",user_id AS "userId",
+                 display_name AS "displayName",assignment_role AS "assignmentRole",
+                 assigned_by AS "assignedBy",assigned_at AS "assignedAt",status
+          FROM requirement_assessment_assignments
+          WHERE requirement_assessment_id::text = ANY(${raIds}) AND status='active'
+          ORDER BY assigned_at DESC
+        `
+      : [];
     const findings=raIds.length
       ? await sql`
           SELECT id::text, requirement_assessment_id::text AS "raId",title,fact,criteria,gap,
@@ -261,7 +271,7 @@ export default async function handler(req,res){
       ok:true,mode:"normalized",user,
       state:{
         meta:{demo:false,version:"1.0",dataMode:"normalized"},
-        org,frameworks,requirements,sources,draftRequirements,draftReviewEvents,assessments,ra,
+        org,frameworks,requirements,sources,draftRequirements,draftReviewEvents,assessments,ra,requirementAssignments,
         evidence,revisions,links:evidenceLinks,proposals,findings,responses,actions,actionChangeRequests,verifications,
         notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:[...assessmentLogs,...actionLogs].sort((a,b)=>new Date(b.at)-new Date(a.at))
       }
