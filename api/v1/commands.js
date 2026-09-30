@@ -82,7 +82,9 @@ export default async function handler(req,res){
           code=${p.sourceCode||null},issuer=${p.issuer||null},issue_date=${p.issueDate||null}::date,
           version=${p.version||null},effective_from=${p.effectiveFrom||null}::date,
           effective_to=${p.effectiveTo||null}::date,owner=${p.owner||null},
-          supersedes_ref=${p.supersedesRef||null},updated_at=now()
+          supersedes_ref=${p.supersedesRef||null},
+          status=CASE WHEN ${p.status||null} IN ('draft','extracted','needs_ocr','error','pending_approval','published','effective') THEN ${p.status||null} ELSE status END,
+          updated_at=now()
         WHERE id=${p.id}::uuid
         RETURNING id::text,title,status
       `;
@@ -301,6 +303,24 @@ export default async function handler(req,res){
         WHERE id=${p.requirementId}::uuid
       `;
       return res.status(200).json({ok:true,status:p.approve===false?"rejected":"effective"});
+    }
+
+    if(command==="draftRequirement.update"){
+      assertPermission(user,"manage_framework");
+      const rows=await sql`
+        UPDATE draft_requirements SET
+          obligation=COALESCE(${p.obligation||null},obligation),
+          source_clause=${p.sourceClause||null},
+          applicability=${p.applicability||null},
+          obligation_type=COALESCE(${p.obligationType||null},obligation_type),
+          expected_evidence=${p.expectedEvidence||null},
+          test_procedure=${p.testProcedure||null},
+          updated_at=now()
+        WHERE id=${p.id}::uuid AND review_status<>'published'
+        RETURNING id::text,review_status AS "reviewStatus"
+      `;
+      if(!rows.length)return res.status(404).json({ok:false,error:"DRAFT_REQUIREMENT_NOT_EDITABLE"});
+      return res.status(200).json({ok:true,record:rows[0]});
     }
 
     if(command==="draftRequirement.reviewBatch"){
