@@ -319,12 +319,16 @@ function publishDrafts(){
   if(!guard("manage_framework"))return;
   var fwId=document.getElementById("publishFw")&&document.getElementById("publishFw").value,fw=S.frameworks.find(function(x){return x.id===fwId}),ds=S.draftRequirements.filter(function(d){return d.reviewStatus==="accepted"});
   if(!fw||!ds.length){modal('<h3>Chưa thể gửi duyệt</h3><p>Cần có ít nhất một nghĩa vụ đã <b>Chấp nhận</b> và chọn Khung đích.</p>');return}
+  if(syncMode==="normalized"){
+    apiCommand("draftRequirement.publishBatch",{frameworkId:fwId,ids:ds.map(function(d){return d.id})}).then(function(){render()}).catch(function(e){alert("Không gửi duyệt được: "+e.message)});return;
+  }
   ds.forEach(function(d,i){var req={id:id("r"),frameworkId:fw.id,code:nextRequirementCode(fw,i),title:d.obligation,description:d.originalText||"",assessable:true,test:d.testProcedure||"Cần xác định",expected:d.expectedEvidence||"Cần xác định",sourceId:d.sourceId,sourceClause:d.sourceClause||"",applicability:d.applicability||"",obligationType:d.obligationType||"general",mandatoryLevel:d.mandatoryLevel||"review",status:"pending_approval"};S.requirements.push(req);fw.reqIds.push(req.id);d.reviewStatus="published"});
   S.sources.forEach(function(s){var own=S.draftRequirements.filter(function(d){return d.sourceId===s.id});if(own.length&&own.every(function(d){return d.reviewStatus==="published"||d.reviewStatus==="rejected"}))s.status="pending_approval"});
   save();render();
 }
 function approveRequirement(rid){
   if(!guard("approve_framework"))return;
+  if(syncMode==="normalized"){apiCommand("requirement.approve",{requirementId:rid,approve:true}).then(render).catch(function(e){alert("Không duyệt được yêu cầu: "+e.message)});return}
   var r=S.requirements.find(function(x){return x.id===rid});if(!r)return;
   r.status="effective";r.approvedBy=ComplianceAccess.current().role;r.approvedAt=now();
   var fw=S.frameworks.find(function(f){return f.reqIds.indexOf(rid)>=0});
@@ -334,6 +338,7 @@ function approveRequirement(rid){
 }
 function rejectRequirement(rid){
   if(!guard("approve_framework"))return;
+  if(syncMode==="normalized"){apiCommand("requirement.approve",{requirementId:rid,approve:false}).then(render).catch(function(e){alert("Không từ chối được yêu cầu: "+e.message)});return}
   var r=S.requirements.find(function(x){return x.id===rid});if(!r)return;
   r.status="rejected";r.approvedBy=ComplianceAccess.current().role;r.approvedAt=now();
   S.logs.push({id:id("log"),type:"reject_requirement",object:"Yêu cầu tuân thủ",at:now(),note:r.code||r.title});save();render();
@@ -342,6 +347,7 @@ function bulkDraft(status){
   if(!guard("manage_framework"))return;
   var ids=Array.from(document.querySelectorAll(".draftCheck:checked")).map(function(x){return x.value});
   if(!ids.length){modal('<h3>Chưa chọn nghĩa vụ</h3><p>Chọn ít nhất một nghĩa vụ để xử lý hàng loạt.</p>');return}
+  if(syncMode==="normalized"){apiCommand("draftRequirement.reviewBatch",{ids:ids,status:status}).then(render).catch(function(e){alert("Không cập nhật được nghĩa vụ: "+e.message)});return}
   S.draftRequirements.forEach(function(d){if(ids.indexOf(d.id)>=0)d.reviewStatus=status});save();render();
 }
 function frameworks(){
