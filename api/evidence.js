@@ -9,6 +9,13 @@ import { assertOrgScope, hasPermission } from "../lib/server-authz.js";
 export const config = { api: { bodyParser: false } };
 
 const MAX_BYTES = 8 * 1024 * 1024;
+const SAFE_INLINE_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "text/plain"
+]);
 
 
 async function revisionContext(sql,revisionId){
@@ -61,12 +68,16 @@ async function streamEvidence(req,res,session){
   const result=await get(pathname,options);
   if(!result||!result.stream)return res.status(404).json({ok:false,error:"EVIDENCE_BLOB_NOT_FOUND"});
 
-  const mode=String(req.query?.mode||"inline")==="download"?"download":"inline";
+  const requestedMode=String(req.query?.mode||"inline")==="download"?"download":"inline";
   const contentType=result.blob?.contentType||ctx.mimeType||"application/octet-stream";
+  const normalizedType=String(contentType).split(";")[0].trim().toLowerCase();
+  const mode=requestedMode==="inline"&&SAFE_INLINE_TYPES.has(normalizedType)?"inline":"download";
   res.statusCode=200;
   res.setHeader("Content-Type",contentType);
   res.setHeader("Content-Disposition",contentDisposition(ctx.originalFilename,mode));
   res.setHeader("X-Content-Type-Options","nosniff");
+  res.setHeader("Content-Security-Policy","sandbox; default-src 'none'");
+  res.setHeader("Referrer-Policy","no-referrer");
   res.setHeader("Cache-Control","private, no-store");
   if(ctx.fileSize)res.setHeader("Content-Length",String(ctx.fileSize));
 
