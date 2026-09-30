@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agris.local/schemas/ai-obligation-extraction-v1.schema.json",
+  "title": "AgriS Compliance Obligation Extraction v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceId",
+    "humanReviewRequired",
+    "obligations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "v1"
+    },
+    "sourceId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "humanReviewRequired": {
+      "const": true
+    },
+    "obligations": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sourceClause",
+          "originalText",
+          "obligation",
+          "applicability",
+          "obligationType",
+          "mandatoryLevel",
+          "expectedEvidence",
+          "testProcedure",
+          "confidence",
+          "reviewReasons",
+          "uncertainties"
+        ],
+        "properties": {
+          "sourceClause": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "originalText": {
+            "type": "string",
+            "maxLength": 6000
+          },
+          "obligation": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 6000
+          },
+          "applicability": {
+            "type": "string",
+            "maxLength": 3000
+          },
+          "obligationType": {
+            "enum": [
+              "general",
+              "prohibition",
+              "approval",
+              "record",
+              "reporting",
+              "condition",
+              "responsibility"
+            ]
+          },
+          "mandatoryLevel": {
+            "enum": [
+              "mandatory",
+              "conditional",
+              "review"
+            ]
+          },
+          "expectedEvidence": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 3000
+          },
+          "testProcedure": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 3000
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "fieldConfidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "obligation": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "applicability": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "evidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "testProcedure": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          },
+          "reviewReasons": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "maxLength": 300
+            }
+          },
+          "uncertainties": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            }
+          }
+        }
+      }
+    }
+  }
+}
