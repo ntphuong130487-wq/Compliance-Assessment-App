@@ -56,4 +56,19 @@ assert(screens.includes("finding-timeline"),"Finding timeline missing");
 assert(screens.includes("aging-strip"),"Action aging missing");
 assert(screens.includes("Human review bắt buộc"),"Human review UX missing");
 
+// End-to-end business lifecycle controls
+for(const control of [
+  "INVALID_COMPLIANCE_RESULT",
+  "INVALID_REQUIREMENT_WORKFLOW",
+  "FINDING_NOT_AWAITING_UNIT_RESPONSE",
+  "FINDING_NOT_READY_FOR_FINAL_REVIEW",
+  "INVALID_FINDING_DISPOSITION",
+  "FINAL_FINDING_REQUIRED",
+  "ACTION_OWNER_AND_TEXT_REQUIRED",
+  "ACTION_NOT_SUBMITTABLE"
+]){
+  assert(commands.includes(control),"Business lifecycle control missing "+control);
+}
+
+
 console.log("PASS - Product v1 UI + business regression controls");
