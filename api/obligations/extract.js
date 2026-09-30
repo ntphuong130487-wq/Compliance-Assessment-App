@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { extractObligations } from "../../lib/obligation-extractor.js";
+import { extractObligationsHybrid, aiExtractionReadiness } from "../../lib/ai-obligation-extractor.js";
 import { normalizedMode, sqlClient, asUuid } from "../../lib/db.js";
 import { requireUser, assertPermission } from "../../lib/server-authz.js";
 
@@ -10,8 +10,8 @@ export default async function handler(req,res){
   if(req.method==="GET"){
     return res.status(200).json({
       ok:true,
-      engine:"rule-v0.1",
-      aiConfigured:Boolean(process.env.AI_GATEWAY_API_KEY&&process.env.AI_EXTRACTION_MODEL)
+      engine:"hybrid-v0.1",
+      ai:aiExtractionReadiness()
     });
   }
   if(req.method!=="POST"){
@@ -22,7 +22,8 @@ export default async function handler(req,res){
   if(!text.trim())return res.status(400).json({ok:false,error:"TEXT_REQUIRED"});
   if(text.length>MAX_TEXT)return res.status(413).json({ok:false,error:"TEXT_TOO_LARGE"});
   const sourceId=String(req.body?.sourceId||"");
-  let obligations=extractObligations(text,sourceId||null);
+  const hybrid=await extractObligationsHybrid(text,sourceId||null,{preferAI:true});
+  let obligations=hybrid.obligations;
   if(normalizedMode()){
     const auth=await requireUser(req);
     if(!auth.ok)return res.status(auth.status).json({ok:false,error:auth.error});
@@ -49,5 +50,5 @@ export default async function handler(req,res){
     await sql`UPDATE compliance_sources SET status='extracted',extracted_at=now(),updated_at=now() WHERE id=${sourceId}::uuid`;
     obligations=persisted;
   }
-  return res.status(200).json({ok:true,engine:"rule-v0.2",count:obligations.length,obligations,persisted:normalizedMode()});
+  return res.status(200).json({ok:true,engine:hybrid.engine,aiUsed:hybrid.aiUsed,aiFallback:Boolean(hybrid.aiFallback),humanReviewRequired:true,count:obligations.length,obligations,persisted:normalizedMode()});
 }
