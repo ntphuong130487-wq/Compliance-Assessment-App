@@ -335,6 +335,13 @@ export default async function handler(req,res){
       `:[];
       if(users.length!==userIds.length)return res.status(409).json({ok:false,error:"ASSIGNEE_NOT_ACTIVE"});
       const byId=new Map(users.map(x=>[String(x.id),x]));
+      const currentAssignments=await sql`
+        SELECT requirement_assessment_id::text AS "raId",user_id AS "userId"
+        FROM requirement_assessment_assignments
+        WHERE requirement_assessment_id::text = ANY(${raIds})
+          AND assignment_role='primary_assessor' AND status='active'
+      `;
+      const currentByRa=new Map(currentAssignments.map(x=>[String(x.raId),String(x.userId)]));
       for(const item of items){
         const assignee=byId.get(String(item.userId||""));
         if(!assignee||!hasPermission({role:assignee.role},"conduct_fieldwork")){
@@ -369,7 +376,7 @@ export default async function handler(req,res){
             (id,object_type,object_id,decision_type,from_state,to_state,decided_by,decided_at,metadata,source)
           VALUES
             (${crypto.randomUUID()}::uuid,'RequirementAssessment',${item.raId}::uuid,'assign_primary_assessor',
-             NULL,${item.userId},${user.id},now(),
+             ${currentByRa.get(String(item.raId))||null},${item.userId},${user.id},now(),
              ${JSON.stringify({assessmentId:p.assessmentId,assigneeName:assignee.name||assignee.email||item.userId})}::jsonb,'compliance-app')
         `);
       }
