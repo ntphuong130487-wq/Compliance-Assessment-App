@@ -15,8 +15,11 @@ for(const screen of ["dashboard","frameworks","assessments","fieldwork","finding
   assert(app.includes("Screens."+screen+"(screenContext())"),"app.js does not delegate "+screen);
 }
 assert(app.length<90000,"app.js refactor target not met; current length "+app.length);
-assert(read("src/screens/fieldwork.js").includes("Evidence workspace"),"Evidence workspace missing");
+const fieldwork=read("src/screens/fieldwork.js"),frameworks=read("src/screens/frameworks.js");
+assert(fieldwork.includes("Evidence workspace"),"Evidence workspace missing");
+assert(fieldwork.includes("data-evidence-preview")&&fieldwork.includes("data-evidence-download"),"Evidence preview/download controls missing");
 assert(read("src/screens/findings.js").includes("finding-timeline"),"Finding timeline missing");
 assert(read("src/screens/actions.js").includes("aging-strip"),"Action aging missing");
-assert(read("src/screens/frameworks.js").includes("Human review bắt buộc"),"AI human-review UX missing");
+assert(frameworks.includes("Human review bắt buộc"),"AI human-review UX missing");
+assert(frameworks.includes("review-audit")&&frameworks.includes("draftReviewEvents"),"AI human-review audit UI missing");
 console.log("PASS - modular screens and product workspaces");
