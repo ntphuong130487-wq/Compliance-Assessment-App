@@ -72,7 +72,10 @@ for(const control of [
   "ASSESSMENT_REQUIREMENTS_INCOMPLETE",
   "ASSESSMENT_FINDINGS_PENDING",
   "ASSESSMENT_NOT_IN_REVIEW",
-  "ASSESSMENT_FIELDWORK_NOT_ACTIVE"
+  "ASSESSMENT_FIELDWORK_NOT_ACTIVE",
+  "REMEDIATION_REQUIREMENT_REQUIRED",
+  "MANDATORY_REMEDIATION_ACTION_REQUIRED",
+  "MANDATORY_ACTION_NOT_REQUIRED"
 ]){
   assert(commands.includes(control),"Business lifecycle control missing "+control);
 }
@@ -85,5 +88,9 @@ assert(app.includes("startAssessment")&&app.includes("submitAssessmentReview")&&
   "Assessment lifecycle UI wiring missing");
 assert(screens.includes("Phạm vi đã khóa")&&screens.includes("Fieldwork không hoạt động"),
   "Assessment scope-freeze UX missing");
+assert(app.includes("remediationRequired")&&app.includes("remediationRequirement")&&app.includes("mandatory_remediation")&&app.includes("improvement_action"),
+  "Recommendation/remediation distinction missing in workflow");
+assert(screens.includes("Yêu cầu khắc phục bắt buộc")&&screens.includes("Khắc phục bắt buộc"),
+  "Recommendation/remediation distinction missing in product screens");
 
 console.log("PASS - Product v1 UI + business regression controls");
