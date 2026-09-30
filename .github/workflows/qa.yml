@@ -48,3 +48,4 @@ jobs:
           node --check api/v1/commands.js
           node --check api/v1/users.js
           node --check scripts/db-check.mjs
+          node --check scripts/db-migrate.mjs
