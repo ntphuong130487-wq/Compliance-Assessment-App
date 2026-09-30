@@ -25,9 +25,9 @@ Nguyên tắc:
 | Phạm vi | Assessment owner | active theo assessment | Đơn vị + quy trình + hoạt động + địa điểm; org scope | Có |
 | Điểm kiểm tra | Assessor | to_do → in_review → done | Result taxonomy được kiểm soát backend | Đã siết |
 | Bằng chứng | Assessor/Action owner | active + revision | Auth, org scope, private storage, immutable history | Có và đã harden |
-| Phát hiện | Assessor/Reviewer | pending_unit_response → pending_final_review → final/dismissed → closed | Không bỏ qua phản hồi/final review; chỉ final mới giao action | Đã siết |
+| Phát hiện | Assessor/Reviewer | pending_unit_response → pending_final_review → final/dismissed → closed | Không bỏ qua phản hồi/final review; tách Khuyến nghị cải thiện khỏi Yêu cầu khắc phục bắt buộc | Đã triển khai |
 | Phản hồi đơn vị | Unit owner | recorded | Chỉ phản hồi khi Finding đang chờ đơn vị | Đã siết |
-| Hành động khắc phục | Action owner | open/reopened → submitted_for_verification → closed/reopened | Owner bắt buộc; closure evidence; không tự verify | Đã siết |
+| Hành động khắc phục | Action owner | open/reopened → submitted_for_verification → closed/reopened | Phân loại mandatory_remediation / improvement_action; owner bắt buộc; closure evidence; không tự verify | Đã triển khai |
 | Xác minh | Independent verifier | effective/ineffective | Verify độc lập; action phải đúng state; recheck closure evidence | Đã siết |
 | Báo cáo | Compliance/RPC management | snapshot/report | Scope-aware; coverage tách khỏi compliance result | Có nền; cần nâng reporting quản trị |
 
@@ -93,8 +93,13 @@ Gap:
 - Chỉ final review khi `pending_final_review`.
 - Chỉ Final Finding mới được giao remediation action.
 
+Đã triển khai:
+- Tách `Khuyến nghị cải thiện` khỏi `Yêu cầu khắc phục bắt buộc`.
+- Khi Finding yêu cầu khắc phục bắt buộc, reviewer phải nhập rõ nội dung yêu cầu khắc phục.
+- Assessment không được gửi rà soát/đóng nếu còn Finding bắt buộc nhưng chưa có ít nhất một `mandatory_remediation` action.
+- Finding không bắt buộc khắc phục vẫn có thể tạo `improvement_action` tự nguyện.
+
 Gap:
-- Cần tách rõ `Khuyến nghị` và `Yêu cầu khắc phục bắt buộc`.
 - Cần duplicate/repeat finding linkage.
 - Cần root cause chuẩn hóa để phục vụ phân tích xu hướng.
 
@@ -143,11 +148,10 @@ Gap ưu tiên:
 4. Production readiness + Neon clone migration + Blob smoke test.
 
 ### P1 — ngay sau production baseline
-1. Tách Recommendation và Mandatory Remediation.
-2. Action progress / due-date change audit.
-3. Assignment chi tiết theo assessor/requirement.
-4. Workflow reopen Assessment có kiểm soát.
-5. Reviewer sign-off nâng cao ở cấp requirement nếu cần.
+1. Action progress / due-date change audit.
+2. Assignment chi tiết theo assessor/requirement.
+3. Workflow reopen Assessment có kiểm soát.
+4. Reviewer sign-off nâng cao ở cấp requirement nếu cần.
 
 ### P2 — quản trị nâng cao
 1. Repeat finding analytics.
