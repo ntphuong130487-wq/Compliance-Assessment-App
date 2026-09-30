@@ -59,9 +59,16 @@ Cần tiếp tục:
 - Close Gate chỉ thực hiện từ Review bởi vai trò có quyền review; việc đóng Assessment không bắt buộc các remediation action đã đóng.
 - Mọi chuyển trạng thái được ghi vào `decision_logs`.
 
+Đã triển khai thêm:
+- Phân công 01 người kiểm tra chính cho từng Requirement Assessment.
+- Chỉ người được phân công hoặc Trưởng đoàn/Quản lý có quyền điều phối mới được cập nhật kết quả, tạo Finding hoặc tải bằng chứng cho Requirement đó.
+- Tất cả Requirement phải có người kiểm tra chính trước khi bắt đầu Fieldwork.
+- Cho phép thay đổi phân công ở trạng thái Draft/Fieldwork; thay đổi được lưu decision log với người cũ → người mới.
+- Fieldwork hiển thị rõ người kiểm tra chính và ưu tiên mở “việc của tôi” cho người dùng hiện tại.
+
 Gap còn lại:
-- Chưa có assignment chi tiết theo từng assessor/requirement.
 - Chưa có workflow mở lại Assessment sau khi đã đóng (nếu phát sinh ngoại lệ).
+- Chưa dùng support assessor trong giao diện; data model đã chừa cấu trúc cho vai trò này.
 
 ### 3.3 Fieldwork & Evidence
 Đã có:
@@ -155,10 +162,10 @@ Gap ưu tiên:
 4. Production readiness + Neon clone migration + Blob smoke test.
 
 ### P1 — ngay sau production baseline
-1. Assignment chi tiết theo assessor/requirement.
-2. Workflow reopen Assessment có kiểm soát.
-3. Reviewer sign-off nâng cao ở cấp requirement nếu cần.
-4. Escalation rule cho Action quá hạn / nhiều lần xin đổi hạn.
+1. Workflow reopen Assessment có kiểm soát.
+2. Reviewer sign-off nâng cao ở cấp requirement nếu cần.
+3. Escalation rule cho Action quá hạn / nhiều lần xin đổi hạn.
+4. Support assessor nếu vận hành thực tế cần nhiều người cùng kiểm tra một Requirement.
 
 ### P2 — quản trị nâng cao
 1. Repeat finding analytics.
