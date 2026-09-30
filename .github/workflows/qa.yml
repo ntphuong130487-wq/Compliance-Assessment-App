@@ -127,6 +127,7 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -f db/migrations/005_ai_obligation_intelligence.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/006_ai_review_audit.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/007_finding_remediation_model.sql
       - name: Verify migration idempotence
         run: |
           psql -v ON_ERROR_STOP=1 -f db/migrations/005_ai_obligation_intelligence.sql
@@ -150,5 +151,16 @@ jobs:
             IF NOT EXISTS (
               SELECT 1 FROM pg_indexes WHERE indexname='idx_decision_draft_review'
             ) THEN RAISE EXCEPTION 'draft review audit index missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='findings' AND column_name='remediation_required'
+            ) THEN RAISE EXCEPTION 'findings.remediation_required missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='remediation_actions' AND column_name='action_type'
+            ) THEN RAISE EXCEPTION 'remediation_actions.action_type missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint WHERE conname='chk_remediation_action_type'
+            ) THEN RAISE EXCEPTION 'remediation action type constraint missing'; END IF;
           END $$;
           SQL
