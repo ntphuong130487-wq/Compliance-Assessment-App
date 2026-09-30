@@ -27,6 +27,7 @@ for(const term of ["assertPermission","assertOrgScope","SELF_VERIFICATION_FORBID
   assert(commands.includes(term),"Command API missing control "+term);
 }
 assert(evidence.includes('target_type')&&evidence.includes('sha256')&&evidence.includes('assertOrgScope'),"Normalized evidence persistence incomplete");
+assert(evidence.includes('BLOB_STORE_ID')&&evidence.includes('authMode:process.env.BLOB_READ_WRITE_TOKEN?"token":"oidc"'),"OIDC/private Blob support missing");
 assert(authz.includes("ORG_SCOPE_FORBIDDEN")&&authz.includes("ROLE_PERMISSIONS"),"Server authorization policy incomplete");
 for(const table of ["assessment_assignments","draft_requirements","unit_responses"]){
   assert(migration.includes("CREATE TABLE IF NOT EXISTS "+table),"Migration missing "+table);
