@@ -209,6 +209,18 @@ export default async function handler(req,res){
         `
       : [];
 
+    const assessmentLogs=assessmentIds.length
+      ? await sql`
+          SELECT id::text,decision_type AS type,'Assessment'::text AS object,
+                 decided_at AS at,reason AS note,object_id::text AS "objectId",
+                 from_state AS "fromState",to_state AS "toState",decided_by AS "decidedBy",metadata
+          FROM decision_logs
+          WHERE object_type='ComplianceAssessment' AND object_id::text = ANY(${assessmentIds})
+          ORDER BY decided_at DESC
+          LIMIT 500
+        `
+      : [];
+
     const notifications=await sql`
       SELECT n.id,n.notification_type AS type,n.severity AS level,n.object_type AS "objectType",
              n.object_id AS "objectId",n.title,n.message AS text,n.created_at AS "createdAt",
@@ -226,7 +238,7 @@ export default async function handler(req,res){
         meta:{demo:false,version:"1.0",dataMode:"normalized"},
         org,frameworks,requirements,sources,draftRequirements,draftReviewEvents,assessments,ra,
         evidence,revisions,links:evidenceLinks,proposals,findings,responses,actions,verifications,
-        notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:[]
+        notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:assessmentLogs
       }
     });
   }catch(error){
