@@ -12,6 +12,53 @@ async function assessmentOrg(sql,assessmentId){
   return rows[0]?.orgId||null;
 }
 
+async function assessmentContext(sql,assessmentId){
+  const rows=await sql`
+    SELECT a.id::text,a.status,a.locked_at AS "lockedAt",a.reviewer,
+           s.org_unit_id::text AS "orgId"
+    FROM compliance_assessments a
+    LEFT JOIN LATERAL (
+      SELECT org_unit_id FROM assessment_scopes s0 WHERE s0.assessment_id=a.id ORDER BY s0.id LIMIT 1
+    ) s ON true
+    WHERE a.id=${assessmentId}::uuid
+  `;
+  return rows[0]||null;
+}
+
+async function assessmentGate(sql,assessmentId){
+  const ra=await sql`
+    SELECT
+      count(*)::int AS total,
+      count(*) FILTER (WHERE workflow_status='done' AND compliance_result<>'not_assessed')::int AS done
+    FROM requirement_assessments
+    WHERE assessment_id=${assessmentId}::uuid
+  `;
+  const findings=await sql`
+    SELECT
+      count(*) FILTER (WHERE f.status IN ('pending_unit_response','pending_final_review','draft'))::int AS pending,
+      count(*) FILTER (WHERE f.status='final')::int AS final_count
+    FROM findings f
+    JOIN requirement_assessments r ON r.id=f.requirement_assessment_id
+    WHERE r.assessment_id=${assessmentId}::uuid
+  `;
+  return {
+    total:Number(ra[0]?.total||0),
+    done:Number(ra[0]?.done||0),
+    pendingFindings:Number(findings[0]?.pending||0),
+    finalFindings:Number(findings[0]?.final_count||0)
+  };
+}
+
+async function recordAssessmentDecision(sql,user,assessmentId,decisionType,fromState,toState,metadata={}){
+  await sql`
+    INSERT INTO decision_logs
+      (id,object_type,object_id,decision_type,from_state,to_state,decided_by,decided_at,metadata,source)
+    VALUES
+      (${crypto.randomUUID()}::uuid,'ComplianceAssessment',${assessmentId}::uuid,${decisionType},
+       ${fromState||null},${toState||null},${user.id},now(),${JSON.stringify(metadata)}::jsonb,'compliance-app')
+  `;
+}
+
 async function findingContext(sql,findingId){
   const rows=await sql`
     SELECT f.id::text,f.status,ra.assessment_id::text AS "assessmentId",s.org_unit_id::text AS "orgId"
@@ -210,9 +257,91 @@ export default async function handler(req,res){
       return res.status(201).json({ok:true,record:{id:assessmentId,status:"draft",requirementCount:eligible.length}});
     }
 
+    if(command==="assessment.startFieldwork"){
+      assertPermission(user,"manage_assessment");
+      const ctx=await assessmentContext(sql,p.assessmentId);
+      if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      if(ctx.status!=="draft")return res.status(409).json({ok:false,error:"ASSESSMENT_NOT_DRAFT"});
+      const gate=await assessmentGate(sql,p.assessmentId);
+      if(gate.total<1)return res.status(409).json({ok:false,error:"ASSESSMENT_REQUIREMENTS_REQUIRED"});
+      await sql.transaction([
+        sql`
+          UPDATE compliance_assessments
+          SET status='fieldwork',locked_at=COALESCE(locked_at,now()),updated_at=now()
+          WHERE id=${p.assessmentId}::uuid AND status='draft'
+        `,
+        sql`
+          INSERT INTO decision_logs
+            (id,object_type,object_id,decision_type,from_state,to_state,decided_by,decided_at,metadata,source)
+          VALUES
+            (${crypto.randomUUID()}::uuid,'ComplianceAssessment',${p.assessmentId}::uuid,'start_fieldwork',
+             'draft','fieldwork',${user.id},now(),${JSON.stringify({scopeFrozen:true,requirementCount:gate.total})}::jsonb,'compliance-app')
+        `
+      ]);
+      return res.status(200).json({ok:true,status:"fieldwork",scopeFrozen:true,gate});
+    }
+
+    if(command==="assessment.submitForReview"){
+      const ctx=await assessmentContext(sql,p.assessmentId);
+      if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      if(!hasPermission(user,"manage_assessment")&&!hasPermission(user,"conduct_fieldwork")){
+        return res.status(403).json({ok:false,error:"FORBIDDEN"});
+      }
+      if(ctx.status!=="fieldwork")return res.status(409).json({ok:false,error:"ASSESSMENT_NOT_IN_FIELDWORK"});
+      const gate=await assessmentGate(sql,p.assessmentId);
+      if(gate.total<1||gate.done!==gate.total){
+        return res.status(409).json({ok:false,error:"ASSESSMENT_REQUIREMENTS_INCOMPLETE",gate});
+      }
+      if(gate.pendingFindings>0){
+        return res.status(409).json({ok:false,error:"ASSESSMENT_FINDINGS_PENDING",gate});
+      }
+      await sql.transaction([
+        sql`UPDATE compliance_assessments SET status='review',updated_at=now() WHERE id=${p.assessmentId}::uuid AND status='fieldwork'`,
+        sql`
+          INSERT INTO decision_logs
+            (id,object_type,object_id,decision_type,from_state,to_state,decided_by,decided_at,metadata,source)
+          VALUES
+            (${crypto.randomUUID()}::uuid,'ComplianceAssessment',${p.assessmentId}::uuid,'submit_for_review',
+             'fieldwork','review',${user.id},now(),${JSON.stringify(gate)}::jsonb,'compliance-app')
+        `
+      ]);
+      return res.status(200).json({ok:true,status:"review",gate});
+    }
+
+    if(command==="assessment.close"){
+      assertPermission(user,"review_assessment");
+      const ctx=await assessmentContext(sql,p.assessmentId);
+      if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      if(ctx.status!=="review")return res.status(409).json({ok:false,error:"ASSESSMENT_NOT_IN_REVIEW"});
+      const gate=await assessmentGate(sql,p.assessmentId);
+      if(gate.total<1||gate.done!==gate.total){
+        return res.status(409).json({ok:false,error:"ASSESSMENT_REQUIREMENTS_INCOMPLETE",gate});
+      }
+      if(gate.pendingFindings>0){
+        return res.status(409).json({ok:false,error:"ASSESSMENT_FINDINGS_PENDING",gate});
+      }
+      await sql.transaction([
+        sql`UPDATE compliance_assessments SET status='closed',updated_at=now() WHERE id=${p.assessmentId}::uuid AND status='review'`,
+        sql`
+          INSERT INTO decision_logs
+            (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
+          VALUES
+            (${crypto.randomUUID()}::uuid,'ComplianceAssessment',${p.assessmentId}::uuid,'close_assessment',
+             'review','closed',${p.note||null},${user.id},now(),${JSON.stringify({...gate,actionsMayRemainOpen:true})}::jsonb,'compliance-app')
+        `
+      ]);
+      return res.status(200).json({ok:true,status:"closed",gate,actionsMayRemainOpen:true});
+    }
+
     if(command==="requirementAssessment.update"){
       assertPermission(user,"conduct_fieldwork");
-      const orgId=await assessmentOrg(sql,p.assessmentId);assertOrgScope(user,orgId);
+      const assessment=await assessmentContext(sql,p.assessmentId);
+      if(!assessment)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,assessment.orgId);
+      if(assessment.status!=="fieldwork")return res.status(409).json({ok:false,error:"ASSESSMENT_FIELDWORK_NOT_ACTIVE"});
       const result=String(p.result||"not_assessed");
       const workflow=String(p.workflow||"in_review");
       if(!["not_assessed","compliant","partially_compliant","non_compliant","not_applicable","insufficient_evidence"].includes(result)){
@@ -237,7 +366,10 @@ export default async function handler(req,res){
 
     if(command==="finding.create"){
       assertPermission(user,"confirm_finding");
-      const orgId=await assessmentOrg(sql,p.assessmentId);assertOrgScope(user,orgId);
+      const assessment=await assessmentContext(sql,p.assessmentId);
+      if(!assessment)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,assessment.orgId);
+      if(assessment.status!=="fieldwork")return res.status(409).json({ok:false,error:"ASSESSMENT_FIELDWORK_NOT_ACTIVE"});
       const ra=await sql`
         SELECT id::text FROM requirement_assessments
         WHERE id=${p.raId}::uuid AND assessment_id=${p.assessmentId}::uuid
