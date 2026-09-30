@@ -24,10 +24,10 @@ assert(html.includes('apiCommand("action.verify"'),"Normalized verification not 
 assert(html.includes('draftRequirement.publishBatch'),"Normalized obligation publish not wired");
 assert(html.includes('source.create'),"Normalized source create not wired");
 
-for(const term of ["requireUser","visibleOrgIds","assessment_scopes","unit_responses","draft_requirements"]){
+for(const term of ["requireUser","visibleOrgIds","assessment_scopes","unit_responses","draft_requirements","requirementAssignments","requirement_assessment_assignments"]){
   assert(bootstrap.includes(term),"Bootstrap missing "+term);
 }
-for(const term of ["assertPermission","assertOrgScope","SELF_VERIFICATION_FORBIDDEN","CLOSURE_EVIDENCE_REQUIRED","REQUIREMENT_SET_INVALID","REQUIREMENT_ASSESSMENT_SCOPE_MISMATCH","ACTION_NOT_READY_FOR_VERIFICATION","INVALID_VERIFICATION_RESULT"]){
+for(const term of ["assertPermission","assertOrgScope","SELF_VERIFICATION_FORBIDDEN","CLOSURE_EVIDENCE_REQUIRED","REQUIREMENT_SET_INVALID","REQUIREMENT_ASSESSMENT_SCOPE_MISMATCH","ACTION_NOT_READY_FOR_VERIFICATION","INVALID_VERIFICATION_RESULT","REQUIREMENT_NOT_ASSIGNED_TO_USER","ASSESSMENT_ASSIGNMENTS_INCOMPLETE"]){
   assert(commands.includes(term),"Command API missing control "+term);
 }
 const findingScopeCheck=commands.indexOf("REQUIREMENT_ASSESSMENT_SCOPE_MISMATCH");
@@ -45,7 +45,7 @@ for(const term of ["revisionContext","contentDisposition","await get(pathname","
 }
 assert(commands.includes("recordDraftDecision")&&commands.includes("human_review_ai_draft")&&commands.includes("human_edit_ai_draft"),"AI human-review audit commands missing");
 assert(bootstrap.includes("draftReviewEvents")&&bootstrap.includes("DraftRequirement"),"Draft review audit bootstrap missing");
-assert(authz.includes("ORG_SCOPE_FORBIDDEN")&&authz.includes("ROLE_PERMISSIONS"),"Server authorization policy incomplete");
+assert(authz.includes("ORG_SCOPE_FORBIDDEN")&&authz.includes("ROLE_PERMISSIONS")&&authz.includes("assign_assessment_work"),"Server authorization policy incomplete");
 const sourceAuth=sourceExtract.indexOf("const auth=await requireUser(req)");
 const sourceBody=sourceExtract.indexOf("const body=await readBody(req)");
 const sourceAI=sourceExtract.indexOf("const hybrid=await extractObligationsHybrid");
