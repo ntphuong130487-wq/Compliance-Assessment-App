@@ -14,7 +14,7 @@ async function assessmentOrg(sql,assessmentId){
 
 async function findingContext(sql,findingId){
   const rows=await sql`
-    SELECT f.id::text,ra.assessment_id::text AS "assessmentId",s.org_unit_id::text AS "orgId"
+    SELECT f.id::text,f.status,ra.assessment_id::text AS "assessmentId",s.org_unit_id::text AS "orgId"
     FROM findings f
     JOIN requirement_assessments ra ON ra.id=f.requirement_assessment_id
     LEFT JOIN LATERAL (
@@ -69,7 +69,7 @@ async function recordDraftDecision(sql,user,row,decisionType,fromState,toState,r
 
 async function actionContext(sql,actionId){
   const rows=await sql`
-    SELECT a.id::text,a.owner_identity_id AS "ownerIdentityId",a.finding_id::text AS "findingId",
+    SELECT a.id::text,a.status,a.owner_identity_id AS "ownerIdentityId",a.finding_id::text AS "findingId",
            ra.assessment_id::text AS "assessmentId",s.org_unit_id::text AS "orgId"
     FROM remediation_actions a
     JOIN findings f ON f.id=a.finding_id
@@ -213,17 +213,26 @@ export default async function handler(req,res){
     if(command==="requirementAssessment.update"){
       assertPermission(user,"conduct_fieldwork");
       const orgId=await assessmentOrg(sql,p.assessmentId);assertOrgScope(user,orgId);
+      const result=String(p.result||"not_assessed");
+      const workflow=String(p.workflow||"in_review");
+      if(!["not_assessed","compliant","partially_compliant","non_compliant","not_applicable","insufficient_evidence"].includes(result)){
+        return res.status(400).json({ok:false,error:"INVALID_COMPLIANCE_RESULT"});
+      }
+      if(!["to_do","in_review","done"].includes(workflow)){
+        return res.status(400).json({ok:false,error:"INVALID_REQUIREMENT_WORKFLOW"});
+      }
       const rows=await sql`
         UPDATE requirement_assessments
-        SET workflow_status=${p.workflow||"in_review"},
-            compliance_result=${p.result||"not_assessed"},
+        SET workflow_status=${workflow},
+            compliance_result=${result},
             observation=${p.observation||null},
             assessed_by=${user.id},
             assessed_at=now()
         WHERE id=${p.id}::uuid AND assessment_id=${p.assessmentId}::uuid
         RETURNING id::text,workflow_status AS workflow,compliance_result AS result,observation,assessed_at AS "assessedAt"
       `;
-      return res.status(200).json({ok:true,record:rows[0]||null});
+      if(!rows.length)return res.status(404).json({ok:false,error:"REQUIREMENT_ASSESSMENT_NOT_FOUND"});
+      return res.status(200).json({ok:true,record:rows[0]});
     }
 
     if(command==="finding.create"){
@@ -251,6 +260,7 @@ export default async function handler(req,res){
       assertPermission(user,"respond_finding");
       const ctx=await findingContext(sql,p.findingId);if(!ctx) return res.status(404).json({ok:false,error:"FINDING_NOT_FOUND"});
       assertOrgScope(user,ctx.orgId);
+      if(ctx.status!=="pending_unit_response")return res.status(409).json({ok:false,error:"FINDING_NOT_AWAITING_UNIT_RESPONSE"});
       const id=crypto.randomUUID();
       await sql`
         INSERT INTO unit_responses(id,finding_id,response_type,response_text,responded_by,responded_at)
@@ -264,6 +274,10 @@ export default async function handler(req,res){
       assertPermission(user,"confirm_finding");
       const ctx=await findingContext(sql,p.findingId);if(!ctx) return res.status(404).json({ok:false,error:"FINDING_NOT_FOUND"});
       assertOrgScope(user,ctx.orgId);
+      if(ctx.status!=="pending_final_review")return res.status(409).json({ok:false,error:"FINDING_NOT_READY_FOR_FINAL_REVIEW"});
+      if(!["keep","adjust","dismiss"].includes(String(p.disposition||"keep"))){
+        return res.status(400).json({ok:false,error:"INVALID_FINDING_DISPOSITION"});
+      }
       const status=p.disposition==="dismiss"?"dismissed":"final";
       await sql`
         UPDATE findings SET
@@ -285,6 +299,10 @@ export default async function handler(req,res){
       assertPermission(user,"assign_action");
       const ctx=await findingContext(sql,p.findingId);if(!ctx) return res.status(404).json({ok:false,error:"FINDING_NOT_FOUND"});
       assertOrgScope(user,ctx.orgId);
+      if(ctx.status!=="final")return res.status(409).json({ok:false,error:"FINAL_FINDING_REQUIRED"});
+      if(!String(p.text||"").trim()||!String(p.ownerIdentityId||"").trim()){
+        return res.status(400).json({ok:false,error:"ACTION_OWNER_AND_TEXT_REQUIRED"});
+      }
       const id=crypto.randomUUID();
       const rows=await sql`
         INSERT INTO remediation_actions
@@ -300,6 +318,7 @@ export default async function handler(req,res){
     if(command==="action.submitForVerification"){
       const ctx=await actionContext(sql,p.actionId);if(!ctx) return res.status(404).json({ok:false,error:"ACTION_NOT_FOUND"});
       assertOrgScope(user,ctx.orgId);
+      if(!["open","reopened"].includes(ctx.status))return res.status(409).json({ok:false,error:"ACTION_NOT_SUBMITTABLE"});
       const isOwner=ctx.ownerIdentityId===user.id;
       if(!isOwner){
         try{assertPermission(user,"update_assigned_action")}catch{assertPermission(user,"assign_action")}
