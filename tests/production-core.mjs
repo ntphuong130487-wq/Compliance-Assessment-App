@@ -48,10 +48,10 @@ assert(bootstrap.includes("draftReviewEvents")&&bootstrap.includes("DraftRequire
 assert(authz.includes("ORG_SCOPE_FORBIDDEN")&&authz.includes("ROLE_PERMISSIONS"),"Server authorization policy incomplete");
 const sourceAuth=sourceExtract.indexOf("const auth=await requireUser(req)");
 const sourceBody=sourceExtract.indexOf("const body=await readBody(req)");
-const sourceAI=sourceExtract.indexOf("extractObligationsHybrid");
+const sourceAI=sourceExtract.indexOf("const hybrid=await extractObligationsHybrid");
 assert(sourceAuth>=0&&sourceAuth<sourceBody&&sourceBody<sourceAI,"Source extraction must authorize before upload read/OCR/AI work");
 const obligationAuth=obligationExtract.indexOf("const auth=await requireUser(req)");
-const obligationAI=obligationExtract.indexOf("extractObligationsHybrid");
+const obligationAI=obligationExtract.indexOf("const hybrid=await extractObligationsHybrid");
 assert(obligationAuth>=0&&obligationAuth<obligationAI,"Obligation extraction must authorize before AI work");
 assert(aiExtractor.includes("AbortSignal.timeout(30000)"),"AI provider call must have a hard timeout");
 assert(docIntel.includes("AbortSignal.timeout(30000)"),"OCR provider call must have a hard timeout");
