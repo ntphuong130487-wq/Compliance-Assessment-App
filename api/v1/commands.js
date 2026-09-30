@@ -229,6 +229,11 @@ export default async function handler(req,res){
     if(command==="finding.create"){
       assertPermission(user,"confirm_finding");
       const orgId=await assessmentOrg(sql,p.assessmentId);assertOrgScope(user,orgId);
+      const ra=await sql`
+        SELECT id::text FROM requirement_assessments
+        WHERE id=${p.raId}::uuid AND assessment_id=${p.assessmentId}::uuid
+      `;
+      if(!ra.length)return res.status(409).json({ok:false,error:"REQUIREMENT_ASSESSMENT_SCOPE_MISMATCH"});
       const id=crypto.randomUUID();
       const rows=await sql`
         INSERT INTO findings
@@ -238,7 +243,7 @@ export default async function handler(req,res){
            ${p.impact||null},${p.severity||"medium"},${p.priority||null},'pending_unit_response',${p.rec||null},now())
         RETURNING id::text,status,created_at AS "createdAt"
       `;
-      await sql`UPDATE requirement_assessments SET workflow_status='in_review' WHERE id=${p.raId}::uuid`;
+      await sql`UPDATE requirement_assessments SET workflow_status='in_review' WHERE id=${p.raId}::uuid AND assessment_id=${p.assessmentId}::uuid`;
       return res.status(201).json({ok:true,record:rows[0]});
     }
 
@@ -317,15 +322,32 @@ export default async function handler(req,res){
       const ctx=await actionContext(sql,p.actionId);if(!ctx) return res.status(404).json({ok:false,error:"ACTION_NOT_FOUND"});
       assertOrgScope(user,ctx.orgId);
       if(ctx.ownerIdentityId===user.id) return res.status(409).json({ok:false,error:"SELF_VERIFICATION_FORBIDDEN"});
+      const state=await sql`
+        SELECT status FROM remediation_actions WHERE id=${p.actionId}::uuid
+      `;
+      if(state[0]?.status!=="submitted_for_verification"){
+        return res.status(409).json({ok:false,error:"ACTION_NOT_READY_FOR_VERIFICATION"});
+      }
+      const evidence=await sql`
+        SELECT count(*)::int AS n FROM evidence_links
+        WHERE target_type='RemediationAction' AND target_id=${p.actionId}::uuid AND purpose='closure_evidence'
+      `;
+      if(Number(evidence[0]?.n||0)<1){
+        return res.status(409).json({ok:false,error:"CLOSURE_EVIDENCE_REQUIRED"});
+      }
+      const result=String(p.result||"");
+      if(!["effective","ineffective"].includes(result)){
+        return res.status(400).json({ok:false,error:"INVALID_VERIFICATION_RESULT"});
+      }
       const id=crypto.randomUUID();
       await sql`
         INSERT INTO verifications(id,action_id,verifier,verification_date,result,note)
-        VALUES(${id}::uuid,${p.actionId}::uuid,${user.id},now(),${p.result},${p.note||null})
+        VALUES(${id}::uuid,${p.actionId}::uuid,${user.id},now(),${result},${p.note||null})
       `;
-      const nextStatus=p.result==="effective"?"closed":"reopened";
+      const nextStatus=result==="effective"?"closed":"reopened";
       await sql`
-        UPDATE remediation_actions SET status=${nextStatus},verification_status=${p.result},updated_at=now()
-        WHERE id=${p.actionId}::uuid
+        UPDATE remediation_actions SET status=${nextStatus},verification_status=${result},updated_at=now()
+        WHERE id=${p.actionId}::uuid AND status='submitted_for_verification'
       `;
       if(nextStatus==="closed"){
         await sql`
