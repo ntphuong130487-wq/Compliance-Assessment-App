@@ -117,10 +117,17 @@ Gap:
 - Closure evidence recheck tại verify.
 - Action owner không tự verify.
 
+Đã triển khai:
+- Action Owner/đơn vị được phân quyền có thể cập nhật tiến độ 0–100% kèm ghi chú bắt buộc; mỗi lần cập nhật được ghi vào decision log.
+- Tiến độ 100% không tự đóng Action; vẫn phải nộp bằng chứng hoàn thành và qua xác minh độc lập.
+- Thay đổi hạn xử lý đi qua workflow: Request → Pending Approval → Approved/Rejected.
+- Người đề nghị không được tự phê duyệt thay đổi hạn.
+- Chỉ khi được phê duyệt hệ thống mới cập nhật Due Date; lý do đề nghị, người đề nghị, người duyệt và ý kiến quyết định đều được lưu vết.
+
 Gap:
-- Chưa có request extension/change due date workflow.
-- Chưa có action progress update có audit trail.
 - Chưa có escalation owner/cấp quản lý theo rule.
+- Chưa có cơ chế hủy đề nghị đổi hạn đang chờ.
+- Chưa có policy về số lần gia hạn/ngưỡng gia hạn; cần AgriS xác nhận trước khi cấu hình.
 
 ### 3.6 Reporting
 Đã có:
@@ -148,10 +155,10 @@ Gap ưu tiên:
 4. Production readiness + Neon clone migration + Blob smoke test.
 
 ### P1 — ngay sau production baseline
-1. Action progress / due-date change audit.
-2. Assignment chi tiết theo assessor/requirement.
-3. Workflow reopen Assessment có kiểm soát.
-4. Reviewer sign-off nâng cao ở cấp requirement nếu cần.
+1. Assignment chi tiết theo assessor/requirement.
+2. Workflow reopen Assessment có kiểm soát.
+3. Reviewer sign-off nâng cao ở cấp requirement nếu cần.
+4. Escalation rule cho Action quá hạn / nhiều lần xin đổi hạn.
 
 ### P2 — quản trị nâng cao
 1. Repeat finding analytics.
