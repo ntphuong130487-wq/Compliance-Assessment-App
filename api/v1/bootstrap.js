@@ -79,6 +79,18 @@ export default async function handler(req,res){
           ORDER BY assigned_at DESC
         `
       : [];
+    const requirementAssignmentLogs=raIds.length
+      ? await sql`
+          SELECT id::text,decision_type AS type,'RequirementAssessment'::text AS object,
+                 decided_at AS at,reason AS note,object_id::text AS "objectId",
+                 from_state AS "fromState",to_state AS "toState",decided_by AS "decidedBy",metadata
+          FROM decision_logs
+          WHERE object_type='RequirementAssessment' AND object_id::text = ANY(${raIds})
+          ORDER BY decided_at DESC
+          LIMIT 1000
+        `
+      : [];
+
     const findings=raIds.length
       ? await sql`
           SELECT id::text, requirement_assessment_id::text AS "raId",title,fact,criteria,gap,
@@ -273,7 +285,7 @@ export default async function handler(req,res){
         meta:{demo:false,version:"1.0",dataMode:"normalized"},
         org,frameworks,requirements,sources,draftRequirements,draftReviewEvents,assessments,ra,requirementAssignments,
         evidence,revisions,links:evidenceLinks,proposals,findings,responses,actions,actionChangeRequests,verifications,
-        notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:[...assessmentLogs,...actionLogs].sort((a,b)=>new Date(b.at)-new Date(a.at))
+        notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:[...assessmentLogs,...requirementAssignmentLogs,...actionLogs].sort((a,b)=>new Date(b.at)-new Date(a.at))
       }
     });
   }catch(error){
