@@ -571,6 +571,14 @@ function bind(){
 
   document.querySelectorAll("[data-actionfor]").forEach(function(b){b.onclick=function(){var f=S.findings.find(function(x){return x.id===b.dataset.actionfor}),a=f&&findingAssessment(f);if(guard("assign_action",a))action(b.dataset.actionfor)}});
   document.querySelectorAll("[data-action-evidence]").forEach(function(b){b.onclick=function(){uploadActionEvidence(b.dataset.actionEvidence)}});
+  document.querySelectorAll("[data-evidence-preview]").forEach(function(b){b.onclick=function(){
+    var id=b.dataset.evidencePreview;if(!id)return;
+    window.open("/api/evidence?revisionId="+encodeURIComponent(id)+"&mode=inline","_blank","noopener,noreferrer");
+  }});
+  document.querySelectorAll("[data-evidence-download]").forEach(function(b){b.onclick=function(){
+    var id=b.dataset.evidenceDownload;if(!id)return;
+    var a=document.createElement("a");a.href="/api/evidence?revisionId="+encodeURIComponent(id)+"&mode=download";a.target="_blank";a.rel="noopener noreferrer";document.body.appendChild(a);a.click();a.remove();
+  }});
 
   document.querySelectorAll("[data-verify]").forEach(function(b){b.onclick=function(){if(guard("verify_action"))verify(b.dataset.verify)}});
   document.querySelectorAll("[data-export]").forEach(function(b){b.onclick=function(){exportCSV(b.dataset.export)}});
