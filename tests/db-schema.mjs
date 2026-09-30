@@ -6,6 +6,7 @@ const aiMigration=fs.readFileSync("db/migrations/005_ai_obligation_intelligence.
 const auditMigration=fs.readFileSync("db/migrations/006_ai_review_audit.sql","utf8");
 const remediationMigration=fs.readFileSync("db/migrations/007_finding_remediation_model.sql","utf8");
 const actionGovernanceMigration=fs.readFileSync("db/migrations/008_action_change_governance.sql","utf8");
+const assignmentMigration=fs.readFileSync("db/migrations/009_requirement_assessor_assignment.sql","utf8");
 function assert(ok,msg){if(!ok)throw new Error(msg)}
 for(const name of ["app_users","user_org_scopes","notifications","user_notification_reads"]){
   assert(schema.includes("CREATE TABLE IF NOT EXISTS "+name),"Canonical schema missing "+name);
@@ -36,4 +37,8 @@ assert(schema.includes("remediation_action_change_requests"),"Canonical schema m
 assert(actionGovernanceMigration.includes("remediation_action_change_requests"),"Action governance migration missing request table");
 assert(actionGovernanceMigration.includes("ux_action_pending_due_change"),"Pending due-date request uniqueness control missing");
 assert(actionGovernanceMigration.includes("chk_action_change_request_status"),"Action change request status constraint missing");
+assert(schema.includes("requirement_assessment_assignments"),"Canonical schema missing requirement assignment table");
+assert(assignmentMigration.includes("requirement_assessment_assignments"),"Requirement assignment migration missing table");
+assert(assignmentMigration.includes("ux_ra_primary_assessor"),"Primary assessor uniqueness control missing");
+assert(assignmentMigration.includes("chk_ra_assignment_role"),"Requirement assignment role constraint missing");
 console.log("PASS - normalized schema + Clerk + AI obligation metadata + human-review audit readiness");
