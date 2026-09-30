@@ -1,7 +1,7 @@
 (function(){
 var KEY="agris_compliance_mvp01";
 var tabs=[["dashboard","Điều hành"],["frameworks","Nguồn & Khung tuân thủ"],["assessments","Chương trình đánh giá"],["fieldwork","Kiểm tra hiện trường"],["findings","Phát hiện"],["actions","Khắc phục"],["reports","Báo cáo"],["settings","Cấu hình"]];
-var view="dashboard",selectedAssessment=null,selectedRA=null,sourceMode="file",draftSourceFilter="all",draftStatusFilter="all",draftTypeFilter="all",draftQuery="",assessmentQuery="",assessmentStatusFilter="all",assessmentOrgFilter="all",findingQuery="",findingStatusFilter="all",findingSeverityFilter="all",actionQuery="",actionStatusFilter="all",actionOwnerFilter="all",runtimeReadiness=null,currentUser=null,clerkInstance=null,clerkConfig=null;
+var view="dashboard",selectedAssessment=null,selectedRA=null,sourceMode="file",draftSourceFilter="all",draftStatusFilter="all",draftTypeFilter="all",draftQuery="",assessmentQuery="",assessmentStatusFilter="all",assessmentOrgFilter="all",findingQuery="",findingStatusFilter="all",findingSeverityFilter="all",actionQuery="",actionStatusFilter="all",actionOwnerFilter="all",runtimeReadiness=null,currentUser=null,clerkInstance=null,clerkConfig=null,clerkLoadError=null,clerkListenerBound=false;
 function id(p){return p+"_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7)}
 function now(){return new Date().toISOString()}
 function seed(){
@@ -162,16 +162,41 @@ function loadExternalScript(src,id){
 }
 async function initClerk(){
   try{
+    clerkLoadError=null;
     clerkConfig=await fetch("/api/auth/config",{headers:{"Accept":"application/json"}}).then(function(r){return r.json()});
     if(!clerkConfig.configured||!clerkConfig.publishableKey)return null;
     var token=String(clerkConfig.publishableKey).split("_")[2],domain=atob(token).slice(0,-1);
     await loadExternalScript("https://"+domain+"/npm/@clerk/ui@1/dist/ui.browser.js","clerk-ui");
-    await loadExternalScript("https://"+domain+"/npm/@clerk/clerk-js@6/dist/clerk.browser.js","clerk-js");
-    if(!window.Clerk)return null;
+    if(!document.getElementById("clerk-js")){
+      await new Promise(function(resolve,reject){
+        var s=document.createElement("script");
+        s.id="clerk-js";
+        s.defer=true;
+        s.crossOrigin="anonymous";
+        s.setAttribute("data-clerk-publishable-key",clerkConfig.publishableKey);
+        s.src="https://"+domain+"/npm/@clerk/clerk-js@6/dist/clerk.browser.js";
+        s.onload=resolve;
+        s.onerror=function(){reject(new Error("CLERK_JS_LOAD_FAILED"))};
+        document.head.appendChild(s);
+      });
+    }
+    if(!window.Clerk)throw new Error("CLERK_GLOBAL_MISSING");
     await window.Clerk.load({ui:{ClerkUI:window.__internal_ClerkUICtor}});
     clerkInstance=window.Clerk;
+    if(!clerkListenerBound&&clerkInstance.addListener){
+      clerkListenerBound=true;
+      clerkInstance.addListener(async function(evt){
+        if(evt&&evt.user){
+          await refreshCurrentUser();
+          await pullRemote();
+          render();
+        }else if(currentUser){
+          currentUser=null;ComplianceAccess.setRuntimeUser(null);render();
+        }
+      });
+    }
     return clerkInstance;
-  }catch(e){clerkInstance=null;return null}
+  }catch(e){clerkLoadError=String(e&&e.message||e);clerkInstance=null;return null}
 }
 async function refreshCurrentUser(){
   try{
@@ -182,14 +207,15 @@ async function refreshCurrentUser(){
 }
 async function loadRuntimeReadiness(){
   try{runtimeReadiness=await fetch("/api/readiness",{headers:{"Accept":"application/json"}}).then(function(r){return r.json()})}catch(e){runtimeReadiness={ok:false}}
+  dataModeRuntime=runtimeReadiness&&runtimeReadiness.database&&runtimeReadiness.database.dataMode||dataModeRuntime;
   await initClerk();
   await refreshCurrentUser();
   render();
 }
 async function openClerkSignIn(){
   if(!clerkInstance)await initClerk();
-  if(clerkInstance)clerkInstance.openSignIn({});
-  else modal('<h3>Chưa cấu hình đăng nhập</h3><p>Clerk chưa được cấu hình trên môi trường triển khai.</p>');
+  if(clerkInstance)return clerkInstance.openSignIn({});
+  modal('<h3>Không tải được đăng nhập</h3><p>Clerk đã được cấu hình nhưng client xác thực chưa tải thành công.</p><p class="small muted">'+esc(clerkLoadError||"Vui lòng tải lại trang và thử lại.")+'</p>');
 }
 async function signOutClerk(){
   ComplianceAccess.setRuntimeUser(null);currentUser=null;
@@ -621,8 +647,23 @@ function bind(){
   var s=document.getElementById("asSel");if(s)s.onchange=function(){selectedAssessment=s.value;selectedRA=null;render()};
   var ps=document.getElementById("personaSel");if(ps)ps.onchange=function(){ComplianceAccess.setPersona(ps.value);if(!ComplianceAccess.viewAllowed(view))view="dashboard";render()};
 }
-function render(){if(!ComplianceAccess.viewAllowed(view))view="dashboard";var f={dashboard:dashboard,frameworks:frameworks,assessments:assessments,fieldwork:fieldwork,findings:findings,actions:actions,reports:reports,settings:settings}[view]||dashboard;document.getElementById("root").innerHTML=f();bind()}
-render();
-pullRemote();
-loadRuntimeReadiness();
+function loginGate(){
+  var configured=runtimeReadiness&&runtimeReadiness.auth&&runtimeReadiness.auth.configured;
+  return '<div style="min-height:100vh;display:grid;place-items:center;background:#f3f7f4;padding:24px"><div class="card" style="max-width:520px;width:100%;padding:28px"><h1 style="margin-top:0;color:#075a32">Đánh giá tuân thủ</h1><p class="muted">Compliance Assessment App · AgriS</p><h2>Đăng nhập để tiếp tục</h2><p>Ứng dụng đang sử dụng dữ liệu production chuẩn hóa. Vui lòng xác thực bằng email đã được mời vào hệ thống.</p>'+(configured?'<button class="btn" data-auth="login">Đăng nhập bằng email</button>':'<div class="fail">Clerk chưa được cấu hình.</div>')+(clerkLoadError?'<div class="search-warning" style="margin-top:12px">Không tải được Clerk client: '+esc(clerkLoadError)+'</div>':'')+'</div></div>'
+}
+function render(){
+  if(runtimeReadiness&&runtimeReadiness.auth&&runtimeReadiness.auth.configured&&dataModeRuntime==="normalized"&&!currentUser){
+    document.getElementById("root").innerHTML=loginGate();bind();return;
+  }
+  if(!ComplianceAccess.viewAllowed(view))view="dashboard";
+  var f={dashboard:dashboard,frameworks:frameworks,assessments:assessments,fieldwork:fieldwork,findings:findings,actions:actions,reports:reports,settings:settings}[view]||dashboard;
+  document.getElementById("root").innerHTML=f();bind()
+}
+async function boot(){
+  document.getElementById("root").innerHTML='<div style="min-height:100vh;display:grid;place-items:center;background:#f3f7f4"><div class="card"><b>Đang khởi tạo ứng dụng...</b></div></div>';
+  await loadRuntimeReadiness();
+  if(currentUser)await pullRemote();
+  render();
+}
+boot();
 })();
