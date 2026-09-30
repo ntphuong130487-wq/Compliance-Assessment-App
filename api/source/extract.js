@@ -32,6 +32,18 @@ export default async function handler(req,res){
     return res.status(405).json({ok:false,error:"METHOD_NOT_ALLOWED"});
   }
   try{
+    let sourceId=String(req.headers["x-source-id"]||"");
+    let sql=null;
+    if(normalizedMode()){
+      const auth=await requireUser(req);
+      if(!auth.ok)return res.status(auth.status).json({ok:false,error:auth.error});
+      assertPermission(auth.user,"manage_framework");
+      if(!asUuid(sourceId))return res.status(400).json({ok:false,error:"VALID_SOURCE_ID_REQUIRED"});
+      sql=sqlClient();
+      const exists=await sql`SELECT id::text FROM compliance_sources WHERE id=${sourceId}::uuid`;
+      if(!exists.length)return res.status(404).json({ok:false,error:"SOURCE_NOT_FOUND"});
+    }
+
     const body=await readBody(req);
     const name=decodeURIComponent(String(req.headers["x-file-name"]||"source"));
     const type=String(req.headers["content-type"]||"application/octet-stream");
@@ -40,18 +52,10 @@ export default async function handler(req,res){
       return res.status(422).json({ok:false,error:"OCR_REQUIRED",ocrRequired:true,name,type,method:extracted.method,ocrConfigured:documentIntelligenceReadiness().ocrConfigured});
     }
     const text=extracted.text;
-    let sourceId=String(req.headers["x-source-id"]||"");
     const hybrid=await extractObligationsHybrid(text,sourceId||null,{preferAI:true});
     let obligations=hybrid.obligations;
 
     if(normalizedMode()){
-      const auth=await requireUser(req);
-      if(!auth.ok)return res.status(auth.status).json({ok:false,error:auth.error});
-      assertPermission(auth.user,"manage_framework");
-      if(!asUuid(sourceId))return res.status(400).json({ok:false,error:"VALID_SOURCE_ID_REQUIRED"});
-      const sql=sqlClient();
-      const exists=await sql`SELECT id::text FROM compliance_sources WHERE id=${sourceId}::uuid`;
-      if(!exists.length)return res.status(404).json({ok:false,error:"SOURCE_NOT_FOUND"});
       await sql`DELETE FROM draft_requirements WHERE source_id=${sourceId}::uuid AND review_status<>'published'`;
       const persisted=[];
       for(const o of obligations){
