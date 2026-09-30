@@ -90,8 +90,9 @@ async function streamEvidence(req,res,session){
 async function targetContext(sql,targetType,targetId){
   if(targetType==="RequirementAssessment"){
     const rows=await sql`
-      SELECT ra.id::text,s.org_unit_id::text AS "orgId"
+      SELECT ra.id::text,a.status AS "assessmentStatus",s.org_unit_id::text AS "orgId"
       FROM requirement_assessments ra
+      JOIN compliance_assessments a ON a.id=ra.assessment_id
       LEFT JOIN LATERAL (
         SELECT org_unit_id FROM assessment_scopes s0 WHERE s0.assessment_id=ra.assessment_id ORDER BY s0.id LIMIT 1
       ) s ON true
@@ -186,8 +187,23 @@ export default async function handler(req,res){
       ctx=await targetContext(sql,targetType,targetId);
       if(!ctx)return res.status(404).json({ok:false,error:"TARGET_NOT_FOUND"});
       assertOrgScope(session,ctx.orgId);
-      if(targetType==="RequirementAssessment"&&!hasPermission(session,"conduct_fieldwork")){
-        return res.status(403).json({ok:false,error:"FORBIDDEN"});
+      if(targetType==="RequirementAssessment"){
+        if(!hasPermission(session,"conduct_fieldwork")){
+          return res.status(403).json({ok:false,error:"FORBIDDEN"});
+        }
+        if(ctx.assessmentStatus!=="fieldwork"){
+          return res.status(409).json({ok:false,error:"ASSESSMENT_FIELDWORK_NOT_ACTIVE"});
+        }
+        if(!hasPermission(session,"assign_assessment_work")){
+          const assigned=await sql`
+            SELECT 1 FROM requirement_assessment_assignments
+            WHERE requirement_assessment_id=${targetId}::uuid
+              AND user_id=${session.id}
+              AND status='active'
+            LIMIT 1
+          `;
+          if(!assigned.length)return res.status(403).json({ok:false,error:"REQUIREMENT_NOT_ASSIGNED_TO_USER"});
+        }
       }
       if(targetType==="RemediationAction"){
         const owner=ctx.ownerIdentityId===session.id;
