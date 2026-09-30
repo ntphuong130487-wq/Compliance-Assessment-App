@@ -31,6 +31,10 @@ jobs:
         run: node tests/intelligence-foundation.mjs
       - name: Run product view-model behavior QA
         run: node tests/view-models.mjs
+      - name: Run modular screen QA
+        run: node tests/screen-modules.mjs
+      - name: Run real PDF DOCX scan OCR regression
+        run: node tests/ocr-fixtures.mjs
       - name: Check application syntax
         run: |
           node --check access-control.js
@@ -48,6 +52,15 @@ jobs:
           node --check lib/ai-obligation-extractor.js
           node --check src/ui/product-ui.js
           node --check src/ui/view-models.js
+          node --check src/screens/shared.js
+          node --check src/screens/dashboard.js
+          node --check src/screens/frameworks.js
+          node --check src/screens/assessments.js
+          node --check src/screens/fieldwork.js
+          node --check src/screens/findings.js
+          node --check src/screens/actions.js
+          node --check src/screens/reports.js
+          node --check src/screens/settings.js
           node --check api/obligations/extract.js
           node --check api/source/extract.js
           node --check api/regulations/search.js
