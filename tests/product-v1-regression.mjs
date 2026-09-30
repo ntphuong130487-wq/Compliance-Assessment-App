@@ -5,6 +5,7 @@ function assert(ok,msg){if(!ok)throw new Error(msg)}
 
 const index=read("index.html");
 const app=read("src/app.js");
+const screens=["dashboard","frameworks","assessments","fieldwork","findings","actions","reports","settings"].map(x=>read("src/screens/"+x+".js")).join("\n");
 const ui=read("src/ui/product-ui.js");
 const css=read("src/styles/product-v1.css");
 const commands=read("api/v1/commands.js");
@@ -28,9 +29,9 @@ for(const screen of [
   "REMEDIATION & VERIFICATION",
   "MANAGEMENT REPORTING"
 ]){
-  assert(app.includes(screen),"Product screen composition missing "+screen);
+  assert(screens.includes(screen),"Product screen composition missing "+screen);
 }
-for(const style of ["metric-grid","product-hero","screen-fieldwork","screen-frameworks","product-progress"]){
+for(const style of ["metric-grid","product-hero","screen-fieldwork","screen-frameworks","product-progress","evidence-grid","finding-timeline","aging-strip","confidence-bar"]){
   assert(css.includes(style),"Product CSS missing "+style);
 }
 
@@ -49,5 +50,10 @@ for(const role of ["compliance_admin","compliance_manager","lead_assessor","asse
 }
 assert(users.includes("self-signup-preprovisioned"),"Internal pre-provision access model missing");
 assert(!users.includes("createInvitation({"),"Production flow must not require Clerk paid/custom-domain invitations");
+assert(app.length<90000,"app.js should stay below modularization guardrail");
+assert(screens.includes("Evidence workspace"),"Evidence workspace missing");
+assert(screens.includes("finding-timeline"),"Finding timeline missing");
+assert(screens.includes("aging-strip"),"Action aging missing");
+assert(screens.includes("Human review bắt buộc"),"Human review UX missing");
 
 console.log("PASS - Product v1 UI + business regression controls");
