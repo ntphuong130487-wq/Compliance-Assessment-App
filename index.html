@@ -253,8 +253,11 @@ async function extractTextSource(src,text){
   try{
     var res=await fetch("/api/obligations/extract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text,sourceId:src.id})});
     var data=await res.json();
-    if(res.ok&&data.ok)drafts=(data.obligations||[]).map(function(d){d.id=id("dr");return d});
-  }catch(e){}
+    if(res.ok&&data.ok){
+      if(syncMode==="normalized"){await pullRemote();render();return}
+      drafts=(data.obligations||[]).map(function(d){d.id=id("dr");return d});
+    }
+  }catch(e){if(syncMode==="normalized"){alert("Không bóc tách được nghĩa vụ: "+e.message);return}}
   if(!drafts.length)drafts=localExtract(text,src.id);
   S.draftRequirements=S.draftRequirements.concat(drafts);
   src.status="extracted";src.extractedCount=drafts.length;src.updatedAt=now();save();render();
@@ -269,22 +272,28 @@ function applySourceMeta(src,d){
 function addTextSource(){
   if(!guard("manage_framework"))return;
   modal('<h3>Nhập nội dung nguồn tuân thủ</h3><form id="srcTextForm"><div class="field"><label>Tên nguồn</label><input name="title" required placeholder="Ví dụ: Quy chế/Quy trình/Văn bản..."></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option><option>Hợp đồng/Cam kết</option></select></div>'+sourceMetaFields({})+'<div class="field"><label>Nội dung</label><textarea name="text" required style="min-height:220px" placeholder="Dán nội dung cần bóc tách nghĩa vụ..."></textarea></div><button class="btn">Bóc tách nghĩa vụ</button></form>');
-  document.getElementById("srcTextForm").onsubmit=function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"text",status:"draft",createdAt:now(),excerpt:d.text.slice(0,1000)};applySourceMeta(src,d);S.sources.unshift(src);document.getElementById("mb").remove();extractTextSource(src,d.text)}
+  document.getElementById("srcTextForm").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));if(syncMode==="normalized"){try{var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,supersedesRef:d.supersedesRef||""});document.getElementById("mb")?.remove();var src={id:out.record.id,title:d.title};await extractTextSource(src,d.text)}catch(e){alert("Không tạo được nguồn: "+e.message)}return}var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"text",status:"draft",createdAt:now(),excerpt:d.text.slice(0,1000)};applySourceMeta(src,d);S.sources.unshift(src);document.getElementById("mb").remove();extractTextSource(src,d.text)}
 }
 async function processSourceFile(src,file){
   try{
     var res=await fetch("/api/source/extract",{method:"POST",headers:{"Content-Type":file.type||"application/octet-stream","X-File-Name":encodeURIComponent(file.name),"X-Source-Id":src.id},body:file});
     var data=await res.json();
+    if(syncMode==="normalized"){
+      if(res.ok&&data.ok){await pullRemote();render();return}
+      var status=data.ocrRequired?"needs_ocr":"error";
+      try{await apiCommand("source.update",{id:src.id,status:status})}catch(e){}
+      alert(data.ocrRequired?"Không đọc được lớp text; nguồn đã chuyển trạng thái Cần OCR.":data.error||"Không đọc được tệp");
+      return;
+    }
     if(res.ok&&data.ok){var ds=(data.obligations||[]).map(function(d){d.id=id("dr");return d});S.draftRequirements=S.draftRequirements.concat(ds);src.status="extracted";src.extractedCount=ds.length;src.excerpt=(data.text||"").slice(0,1000)}
     else{src.status=data.ocrRequired?"needs_ocr":"error";src.error=data.ocrRequired?"Không đọc được lớp text của file. Có thể là file scan/ảnh; cần OCR hoặc nhập text thay thế.":data.error||"Không đọc được tệp";}
-  }catch(e){src.status="error";src.error="Không kết nối được bộ đọc tài liệu"}
+  }catch(e){if(syncMode==="normalized"){alert("Không kết nối được bộ đọc tài liệu");return}src.status="error";src.error="Không kết nối được bộ đọc tài liệu"}
   src.updatedAt=now();save();render();
 }
 function addFileSource(){
   if(!guard("manage_framework"))return;
   var p=document.getElementById("sourceFile");p.value="";
-  p.onchange=function(){var file=p.files&&p.files[0];if(!file)return;modal('<h3>Thông tin nguồn đính kèm</h3><form id="srcFileMeta"><div class="field"><label>Tên nguồn</label><input name="title" required value="'+esc(file.name)+'"></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Tệp đính kèm</option><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option></select></div>'+sourceMetaFields({})+'<button class="btn">Lưu & bóc tách</button></form>');document.getElementById("srcFileMeta").onsubmit=function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"file",fileName:file.name,fileType:file.type,status:"draft",createdAt:now()};applySourceMeta(src,d);S.sources.unshift(src);document.getElementById("mb").remove();save();render();processSourceFile(src,file)}};
-  p.click();
+  p.onchange=function(){var file=p.files&&p.files[0];if(!file)return;modal('<h3>Thông tin nguồn đính kèm</h3><form id="srcFileMeta"><div class="field"><label>Tên nguồn</label><input name="title" required value="'+esc(file.name)+'"></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Tệp đính kèm</option><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option></select></div>'+sourceMetaFields({})+'<button class="btn">Lưu & bóc tách</button></form>');document.getElementById("srcFileMeta").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));if(syncMode==="normalized"){try{var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,supersedesRef:d.supersedesRef||"",fileName:file.name,mimeType:file.type||""});document.getElementById("mb")?.remove();await processSourceFile({id:out.record.id,title:d.title},file)}catch(e){alert("Không tạo được nguồn: "+e.message)}return}var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"file",fileName:file.name,fileType:file.type,status:"draft",createdAt:now()};applySourceMeta(src,d);S.sources.unshift(src);document.getElementById("mb").remove();save();render();processSourceFile(src,file)}};p.click();
 }
 function searchRegulations(){
   if(!guard("manage_framework"))return;
@@ -297,7 +306,7 @@ function searchRegulations(){
 function editSourceMetadata(sid){
   var s=S.sources.find(function(x){return x.id===sid});if(!s||!guard("manage_framework"))return;
   modal('<h3>Metadata vòng đời nguồn</h3><form id="sourceMetaEdit"><div class="field"><label>Tên nguồn</label><input name="title" required value="'+esc(s.title)+'"></div><div class="field"><label>Loại nguồn</label><input name="sourceType" value="'+esc(s.sourceType||"")+'"></div>'+sourceMetaFields(s)+'<button class="btn">Lưu metadata</button></form>');
-  document.getElementById("sourceMetaEdit").onsubmit=function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));s.title=d.title;s.sourceType=d.sourceType;applySourceMeta(s,d);s.updatedAt=now();save();document.getElementById("mb").remove();render()}
+  document.getElementById("sourceMetaEdit").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));if(syncMode==="normalized"){try{await apiCommand("source.update",{id:sid,title:d.title,sourceType:d.sourceType,sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,supersedesRef:d.supersedesRef||""});document.getElementById("mb")?.remove();render()}catch(e){alert("Không lưu được metadata: "+e.message)}return}s.title=d.title;s.sourceType=d.sourceType;applySourceMeta(s,d);s.updatedAt=now();save();document.getElementById("mb").remove();render()}
 }
 function provideSourceText(sid){
   var s=S.sources.find(function(x){return x.id===sid});if(!s||!guard("manage_framework"))return;
@@ -307,7 +316,7 @@ function provideSourceText(sid){
 function editDraft(did){
   var d=S.draftRequirements.find(function(x){return x.id===did});if(!d)return;
   modal('<h3>Rà soát nghĩa vụ</h3><form id="draftEdit"><div class="field"><label>Nghĩa vụ tuân thủ</label><textarea name="obligation" required>'+esc(d.obligation)+'</textarea></div><div class="field"><label>Điều/Khoản/Mục nguồn</label><input name="sourceClause" value="'+esc(d.sourceClause||"")+'"></div><div class="field"><label>Đối tượng/phạm vi áp dụng</label><input name="applicability" value="'+esc(d.applicability||"")+'"></div><div class="field"><label>Loại nghĩa vụ</label><input name="obligationType" value="'+esc(d.obligationType||"general")+'"></div><div class="field"><label>Bằng chứng kỳ vọng</label><textarea name="expectedEvidence">'+esc(d.expectedEvidence||"")+'</textarea></div><div class="field"><label>Thủ tục kiểm tra</label><textarea name="testProcedure">'+esc(d.testProcedure||"")+'</textarea></div><button class="btn">Lưu rà soát</button></form>');
-  document.getElementById("draftEdit").onsubmit=function(ev){ev.preventDefault();Object.assign(d,Object.fromEntries(new FormData(ev.target)));document.getElementById("mb").remove();save();render()}
+  document.getElementById("draftEdit").onsubmit=async function(ev){ev.preventDefault();var x=Object.fromEntries(new FormData(ev.target));if(syncMode==="normalized"){try{await apiCommand("draftRequirement.update",Object.assign({id:did},x));document.getElementById("mb")?.remove();render()}catch(e){alert("Không lưu được nghĩa vụ: "+e.message)}return}Object.assign(d,x);document.getElementById("mb").remove();save();render()}
 }
 function nextRequirementCode(fw,offset){
   var prefix=String(fw.code||"YC").toUpperCase().replace(/[^A-Z0-9]+/g,"-").replace(/^-|-$/g,"")||"YC";
