@@ -54,8 +54,9 @@ export default async function handler(req,res){
   if(req.method==="GET"){
     return res.status(200).json({
       ok:true,
-      configured:Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+      configured:Boolean(process.env.BLOB_STORE_ID||process.env.BLOB_READ_WRITE_TOKEN),
       authConfigured:clerkConfigured(),
+      authMode:process.env.BLOB_READ_WRITE_TOKEN?"token":"oidc",
       maxBytes:MAX_BYTES
     });
   }
@@ -65,7 +66,7 @@ export default async function handler(req,res){
     return res.status(405).json({ok:false,error:"METHOD_NOT_ALLOWED"});
   }
 
-  if(!process.env.BLOB_READ_WRITE_TOKEN){
+  if(!process.env.BLOB_STORE_ID&&!process.env.BLOB_READ_WRITE_TOKEN){
     return res.status(503).json({ok:false,error:"BLOB_NOT_CONFIGURED"});
   }
 
@@ -82,7 +83,9 @@ export default async function handler(req,res){
     const safe=original.replace(/[^a-zA-Z0-9._-]+/g,"_").slice(-160);
     const contentType=(req.headers["content-type"]||"application/octet-stream").toString();
     const pathname="compliance-evidence/"+Date.now()+"-"+safe;
-    const blob=await put(pathname,body,{access:"private",contentType,token:process.env.BLOB_READ_WRITE_TOKEN});
+    const blobOptions={access:"private",contentType};
+    if(process.env.BLOB_READ_WRITE_TOKEN)blobOptions.token=process.env.BLOB_READ_WRITE_TOKEN;
+    const blob=await put(pathname,body,blobOptions);
 
     let normalizedRecord=null;
     if(normalizedMode()){
