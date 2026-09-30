@@ -21,7 +21,8 @@ function normalizeState(s){
   (s.assessments||[]).forEach(function(a){a.processRef=a.processRef||"";a.activityRef=a.activityRef||"";a.locationRef=a.locationRef||"";a.periodFrom=a.periodFrom||"";a.periodTo=a.periodTo||""});
   (s.findings||[]).forEach(function(f){if(f.status==="confirmed")f.status="final";if(f.remediationRequired==null)f.remediationRequired=false;f.remediationRequirement=f.remediationRequirement||""});
   (s.sources||[]).forEach(function(x){x.sourceCode=x.sourceCode||"";x.issuer=x.issuer||"";x.issueDate=x.issueDate||"";x.effectiveFrom=x.effectiveFrom||"";x.effectiveTo=x.effectiveTo||"";x.version=x.version||"";x.supersedesRef=x.supersedesRef||"";x.owner=x.owner||""});
-  (s.actions||[]).forEach(function(a){a.closureEvidenceIds=a.closureEvidenceIds||[];a.createdAt=a.createdAt||null;a.actionType=a.actionType||"mandatory_remediation"});
+  (s.actions||[]).forEach(function(a){a.closureEvidenceIds=a.closureEvidenceIds||[];a.createdAt=a.createdAt||null;a.actionType=a.actionType||"mandatory_remediation";a.progress=Number(a.progress||0)});
+  s.actionChangeRequests=s.actionChangeRequests||[];
   s.notifications=s.notifications||[];
   s.notificationSettings=s.notificationSettings||{inApp:true,overdueEscalation:true};
   return s
@@ -631,6 +632,10 @@ function bind(){
   document.querySelectorAll("[data-finalize]").forEach(function(b){b.onclick=function(){finalizeFinding(b.dataset.finalize)}});
 
   document.querySelectorAll("[data-actionfor]").forEach(function(b){b.onclick=function(){var f=S.findings.find(function(x){return x.id===b.dataset.actionfor}),a=f&&findingAssessment(f);if(guard("assign_action",a))action(b.dataset.actionfor)}});
+  function actionGovernanceContext(){return{S:S,modal:modal,apiCommand:apiCommand,syncMode:syncMode,save:save,render:render,esc:esc,currentId:ComplianceAccess.current().id,now:now,id:id}}
+  document.querySelectorAll("[data-action-progress]").forEach(function(b){b.onclick=function(){ComplianceActionGovernance.updateProgress(actionGovernanceContext(),b.dataset.actionProgress)}});
+  document.querySelectorAll("[data-action-due-request]").forEach(function(b){b.onclick=function(){ComplianceActionGovernance.requestDueDateChange(actionGovernanceContext(),b.dataset.actionDueRequest)}});
+  document.querySelectorAll("[data-action-due-decide]").forEach(function(b){b.onclick=function(){ComplianceActionGovernance.decideDueDateChange(actionGovernanceContext(),b.dataset.actionDueDecide)}});
   document.querySelectorAll("[data-action-evidence]").forEach(function(b){b.onclick=function(){uploadActionEvidence(b.dataset.actionEvidence)}});
   document.querySelectorAll("[data-evidence-preview]").forEach(function(b){b.onclick=function(){
     var id=b.dataset.evidencePreview;if(!id)return;
