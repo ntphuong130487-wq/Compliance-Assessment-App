@@ -238,6 +238,65 @@ export default async function handler(req,res){
       return res.status(200).json({ok:true,status:p.approve===false?"rejected":"effective"});
     }
 
+    if(command==="draftRequirement.reviewBatch"){
+      assertPermission(user,"manage_framework");
+      const ids=Array.isArray(p.ids)?p.ids.filter(Boolean):[];
+      const status=["accepted","rejected","draft"].includes(p.status)?p.status:"draft";
+      if(!ids.length)return res.status(400).json({ok:false,error:"NO_DRAFT_REQUIREMENTS"});
+      await sql`
+        UPDATE draft_requirements
+        SET review_status=${status},reviewed_by=${user.id},
+            reviewed_at=CASE WHEN ${status}='draft' THEN NULL ELSE now() END,updated_at=now()
+        WHERE id::text = ANY(${ids})
+      `;
+      return res.status(200).json({ok:true,status,count:ids.length});
+    }
+
+    if(command==="draftRequirement.publishBatch"){
+      assertPermission(user,"manage_framework");
+      const ids=Array.isArray(p.ids)?p.ids.filter(Boolean):[];
+      if(!ids.length)return res.status(400).json({ok:false,error:"NO_DRAFT_REQUIREMENTS"});
+      const fwRows=await sql`SELECT id::text,code,status FROM compliance_frameworks WHERE id=${p.frameworkId}::uuid`;
+      if(!fwRows.length)return res.status(404).json({ok:false,error:"FRAMEWORK_NOT_FOUND"});
+      const fw=fwRows[0];
+      const drafts=await sql`
+        SELECT id::text,source_id::text AS "sourceId",source_clause AS "sourceClause",original_text AS "originalText",
+               obligation,applicability,obligation_type AS "obligationType",mandatory_level AS "mandatoryLevel",
+               expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure"
+        FROM draft_requirements
+        WHERE id::text = ANY(${ids}) AND review_status='accepted'
+        ORDER BY created_at,id
+      `;
+      if(drafts.length!==ids.length)return res.status(409).json({ok:false,error:"DRAFT_SET_NOT_ACCEPTED"});
+      const existing=await sql`
+        SELECT code FROM compliance_requirements
+        WHERE code LIKE ${fw.code+"-%"}
+      `;
+      let max=0;
+      for(const row of existing){
+        const m=String(row.code||"").match(/-(\d+)$/);if(m)max=Math.max(max,Number(m[1]));
+      }
+      const created=[];
+      for(let i=0;i<drafts.length;i++){
+        const d=drafts[i],rid=crypto.randomUUID(),code=fw.code+"-"+String(max+i+1).padStart(3,"0");
+        await sql`
+          INSERT INTO compliance_requirements
+            (id,code,title,description,source_id,source_clause,assessable,mandatory_level,test_procedure,
+             expected_evidence,applicability,obligation_type,status,created_at)
+          VALUES
+            (${rid}::uuid,${code},${d.obligation},${d.originalText||null},${d.sourceId}::uuid,
+             ${d.sourceClause||null},true,${d.mandatoryLevel||"review"},${d.testProcedure||"Cần xác định"},
+             ${d.expectedEvidence||"Cần xác định"},${d.applicability||null},${d.obligationType||"general"},
+             'pending_approval',now())
+        `;
+        await sql`INSERT INTO framework_requirements(framework_id,requirement_id) VALUES(${p.frameworkId}::uuid,${rid}::uuid)`;
+        await sql`UPDATE draft_requirements SET review_status='published',reviewed_by=${user.id},reviewed_at=now(),updated_at=now() WHERE id=${d.id}::uuid`;
+        created.push({id:rid,code});
+      }
+      await sql`UPDATE compliance_frameworks SET status='pending_approval',updated_at=now() WHERE id=${p.frameworkId}::uuid`;
+      return res.status(201).json({ok:true,created,count:created.length,status:"pending_approval"});
+    }
+
     if(command==="draftRequirement.review"){
       assertPermission(user,"manage_framework");
       const status=["accepted","rejected","draft"].includes(p.status)?p.status:"draft";
