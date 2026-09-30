@@ -16,6 +16,10 @@
   "scripts": {
     "test": "node tests/qa.mjs",
     "db:check": "node scripts/db-check.mjs",
-    "db:migrate": "node scripts/db-migrate.mjs"
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "test:browser": "node tests/browser-product.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.0"
   }
 }
