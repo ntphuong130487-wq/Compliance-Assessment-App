@@ -178,3 +178,13 @@ table tbody tr:hover{background:#f7faf8}
   .timeline-step:not(:last-child):after{display:none}
   .aging-strip{grid-template-columns:repeat(2,1fr)}
 }
+
+.evidence-actions{margin-top:8px;gap:6px}
+.evidence-actions .btn{padding:5px 8px;font-size:10px}
+.review-audit{margin-top:10px;border:1px solid var(--product-line);border-radius:10px;background:#fafbfa;padding:8px 10px}
+.review-audit summary{cursor:pointer;font-size:11px;font-weight:800;color:#4e6259}
+.audit-event{display:grid;grid-template-columns:minmax(120px,.8fr) minmax(160px,1.2fr) minmax(110px,.7fr);gap:8px;padding:7px 0;border-top:1px solid var(--product-line);font-size:10px}
+.review-audit[open] summary{margin-bottom:4px}
+.audit-event b{color:var(--product-ink)}
+.audit-event span{color:var(--product-muted)}
+@media(max-width:760px){.audit-event{grid-template-columns:1fr}}
