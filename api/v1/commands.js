@@ -36,7 +36,14 @@ async function assessmentGate(sql,assessmentId){
   const findings=await sql`
     SELECT
       count(*) FILTER (WHERE f.status IN ('pending_unit_response','pending_final_review','draft'))::int AS pending,
-      count(*) FILTER (WHERE f.status='final')::int AS final_count
+      count(*) FILTER (WHERE f.status='final')::int AS final_count,
+      count(*) FILTER (
+        WHERE f.status='final' AND f.remediation_required=true
+          AND NOT EXISTS (
+            SELECT 1 FROM remediation_actions a
+            WHERE a.finding_id=f.id AND a.action_type='mandatory_remediation'
+          )
+      )::int AS mandatory_without_action
     FROM findings f
     JOIN requirement_assessments r ON r.id=f.requirement_assessment_id
     WHERE r.assessment_id=${assessmentId}::uuid
@@ -45,7 +52,8 @@ async function assessmentGate(sql,assessmentId){
     total:Number(ra[0]?.total||0),
     done:Number(ra[0]?.done||0),
     pendingFindings:Number(findings[0]?.pending||0),
-    finalFindings:Number(findings[0]?.final_count||0)
+    finalFindings:Number(findings[0]?.final_count||0),
+    mandatoryFindingsWithoutAction:Number(findings[0]?.mandatory_without_action||0)
   };
 }
 
@@ -297,6 +305,9 @@ export default async function handler(req,res){
       if(gate.pendingFindings>0){
         return res.status(409).json({ok:false,error:"ASSESSMENT_FINDINGS_PENDING",gate});
       }
+      if(gate.mandatoryFindingsWithoutAction>0){
+        return res.status(409).json({ok:false,error:"MANDATORY_REMEDIATION_ACTION_REQUIRED",gate});
+      }
       await sql.transaction([
         sql`UPDATE compliance_assessments SET status='review',updated_at=now() WHERE id=${p.assessmentId}::uuid AND status='fieldwork'`,
         sql`
@@ -322,6 +333,9 @@ export default async function handler(req,res){
       }
       if(gate.pendingFindings>0){
         return res.status(409).json({ok:false,error:"ASSESSMENT_FINDINGS_PENDING",gate});
+      }
+      if(gate.mandatoryFindingsWithoutAction>0){
+        return res.status(409).json({ok:false,error:"MANDATORY_REMEDIATION_ACTION_REQUIRED",gate});
       }
       await sql.transaction([
         sql`UPDATE compliance_assessments SET status='closed',updated_at=now() WHERE id=${p.assessmentId}::uuid AND status='review'`,
@@ -411,10 +425,17 @@ export default async function handler(req,res){
         return res.status(400).json({ok:false,error:"INVALID_FINDING_DISPOSITION"});
       }
       const status=p.disposition==="dismiss"?"dismissed":"final";
+      const remediationRequired=status==="final"&&Boolean(p.remediationRequired);
+      const remediationRequirement=String(p.remediationRequirement||"").trim();
+      if(remediationRequired&&!remediationRequirement){
+        return res.status(400).json({ok:false,error:"REMEDIATION_REQUIREMENT_REQUIRED"});
+      }
       await sql`
         UPDATE findings SET
           title=COALESCE(${p.title||null},title),gap=COALESCE(${p.gap||null},gap),
-          recommendation=COALESCE(${p.rec||null},recommendation),
+          recommendation=${p.rec||null},
+          remediation_required=${remediationRequired},
+          remediation_requirement=${remediationRequired?remediationRequirement:null},
           disposition=${p.disposition||"keep"},disposition_note=${p.dispositionNote},
           finalized_by=${user.id},finalized_at=now(),status=${status},updated_at=now()
         WHERE id=${p.findingId}::uuid
@@ -435,12 +456,20 @@ export default async function handler(req,res){
       if(!String(p.text||"").trim()||!String(p.ownerIdentityId||"").trim()){
         return res.status(400).json({ok:false,error:"ACTION_OWNER_AND_TEXT_REQUIRED"});
       }
+      const actionType=["mandatory_remediation","improvement_action"].includes(String(p.actionType))?String(p.actionType):"mandatory_remediation";
+      const findingPolicy=await sql`
+        SELECT remediation_required AS "remediationRequired"
+        FROM findings WHERE id=${p.findingId}::uuid
+      `;
+      if(actionType==="mandatory_remediation"&&!findingPolicy[0]?.remediationRequired){
+        return res.status(409).json({ok:false,error:"MANDATORY_ACTION_NOT_REQUIRED"});
+      }
       const id=crypto.randomUUID();
       const rows=await sql`
         INSERT INTO remediation_actions
-          (id,finding_id,action_text,owner,owner_identity_id,due_date,status,progress,created_by,created_at,updated_at)
+          (id,finding_id,action_type,action_text,owner,owner_identity_id,due_date,status,progress,created_by,created_at,updated_at)
         VALUES
-          (${id}::uuid,${p.findingId}::uuid,${p.text},${p.owner},${p.ownerIdentityId||null},
+          (${id}::uuid,${p.findingId}::uuid,${actionType},${p.text},${p.owner},${p.ownerIdentityId||null},
            ${p.due||null}::date,'open',0,${user.id},now(),now())
         RETURNING id::text,status,created_at AS "createdAt"
       `;
