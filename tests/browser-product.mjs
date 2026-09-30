@@ -8,6 +8,22 @@ page.on("console",m=>{if(m.type()==="error")consoleErrors.push(m.text())});
 page.on("pageerror",e=>consoleErrors.push("PAGEERROR: "+e.message));
 
 await page.goto("http://127.0.0.1:4173",{waitUntil:"networkidle"});
+await page.evaluate(()=>{
+  const s=window.AgriSComplianceDemoState();
+  if(s.revisions&&s.revisions[0])s.revisions[0].fileUri="https://example.private.blob.vercel-storage.com/compliance-evidence/browser-test.pdf";
+  s.draftRequirements=[{
+    id:"dr_browser_ai",sourceId:"src_env",sourceClause:"Điều kiểm thử",originalText:"Đơn vị phải lưu giữ hồ sơ kiểm thử.",
+    obligation:"Đơn vị phải lưu giữ hồ sơ kiểm thử.",applicability:"Áp dụng cho đơn vị được đánh giá.",
+    obligationType:"record",mandatoryLevel:"mandatory",expectedEvidence:"Hồ sơ kiểm thử",testProcedure:"Đối chiếu hồ sơ",
+    reviewStatus:"draft",aiGenerated:true,aiConfidence:0.61,aiReviewReasons:["Độ tin cậy thấp"]
+  }];
+  s.draftReviewEvents=[{
+    id:"audit_browser",objectId:"dr_browser_ai",decisionType:"human_review_ai_draft",fromState:"draft",toState:"accepted",
+    decidedBy:"browser-test",decidedAt:"2026-09-30T07:00:00Z",metadata:{aiConfidence:0.61}
+  }];
+  localStorage.setItem("agris_compliance_mvp01",JSON.stringify(s));
+});
+await page.reload({waitUntil:"networkidle"});
 await page.waitForSelector(".side [data-nav='dashboard']");
 assert((await page.locator(".side [data-nav]").count())>=8,"Expected 8 desktop navigation screens");
 
@@ -34,6 +50,8 @@ for(const [nav,title,eyebrow] of screens){
 await page.locator(".side [data-nav='fieldwork']").click();
 assert(await page.locator(".fieldwork-layout").count()===1,"Fieldwork layout missing");
 assert((await page.locator("body").innerText()).includes("Evidence workspace"),"Evidence workspace missing");
+assert(await page.locator("[data-evidence-preview]").count()>=1,"Evidence preview control missing in rendered workspace");
+assert(await page.locator("[data-evidence-download]").count()>=1,"Evidence download control missing in rendered workspace");
 
 await page.locator(".side [data-nav='findings']").click();
 assert(await page.locator(".finding-timeline").count()>=1,"Finding timeline missing");
@@ -43,6 +61,8 @@ assert(await page.locator(".aging-strip").count()===1,"Action aging strip missin
 
 await page.locator(".side [data-nav='frameworks']").click();
 assert((await page.locator("body").innerText()).includes("Human review"),"Human-review language missing");
+assert(await page.locator(".review-audit").count()>=1,"Human-review audit trail missing");
+assert((await page.locator("body").innerText()).includes("61%"),"AI confidence not rendered");
 
 const fatal=consoleErrors.filter(x=>!/404|TEST_API_NOT_AVAILABLE|favicon/i.test(x));
 assert(fatal.length===0,"Unexpected browser errors: "+fatal.join(" | "));
