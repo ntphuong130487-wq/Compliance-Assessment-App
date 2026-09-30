@@ -23,6 +23,8 @@ jobs:
         run: node tests/auth-foundation.mjs
       - name: Run Database schema QA
         run: node tests/db-schema.mjs
+      - name: Run Production Core QA
+        run: node tests/production-core.mjs
       - name: Check application syntax
         run: |
           node --check access-control.js
@@ -40,4 +42,9 @@ jobs:
           node --check api/admin/users.js
           node --check api/readiness.js
           node --check api/notifications/run.js
+          node --check lib/db.js
+          node --check lib/server-authz.js
+          node --check api/v1/bootstrap.js
+          node --check api/v1/commands.js
+          node --check api/v1/users.js
           node --check scripts/db-check.mjs
