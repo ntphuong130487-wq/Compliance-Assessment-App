@@ -4,7 +4,8 @@ function assert(ok,msg){if(!ok)throw new Error(msg)}
 const src=fs.readFileSync("api/evidence.js","utf8");
 
 for(const term of [
-  "revisionContext","assertOrgScope(session,ctx.orgId)","contentDisposition",
+  "revisionContext","assertOrgScope(session,ctx.orgId)","contentDisposition","SAFE_INLINE_TYPES",
+  "Content-Security-Policy","Referrer-Policy",
   "BLOB_NOT_CONFIGURED","AUTH_REQUIRED","USER_NOT_PROVISIONED",
   "EVIDENCE_SCOPE_UNRESOLVED","EVIDENCE_BLOB_NOT_FOUND",
   "NORMALIZED_TARGET_REQUIRED","TARGET_NOT_FOUND"
@@ -39,3 +40,10 @@ assert(streamScope>streamStart&&getBlob>streamScope,
   "Private stream handler must enforce org scope before Blob read");
 
 console.log("PASS - evidence auth, org scope, atomicity and cleanup ordering");
+
+const inlinePolicy=src.indexOf("SAFE_INLINE_TYPES.has(normalizedType)");
+const disposition=src.indexOf('res.setHeader("Content-Disposition"',inlinePolicy);
+assert(inlinePolicy>=0&&disposition>inlinePolicy,
+  "Inline evidence must be restricted to explicit safe MIME types before response");
+assert(src.includes('"application/pdf"')&&src.includes('"image/png"')&&!src.includes('"image/svg+xml"'),
+  "Active document types must not be allowed inline");
