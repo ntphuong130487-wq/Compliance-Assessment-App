@@ -39,11 +39,16 @@ export default async function handler(req,res){
       await sql`
         INSERT INTO draft_requirements
           (id,source_id,source_clause,original_text,obligation,applicability,obligation_type,
-           mandatory_level,expected_evidence,test_procedure,review_status,created_at,updated_at)
+           mandatory_level,expected_evidence,test_procedure,review_status,
+           ai_generated,ai_confidence,ai_engine,ai_schema_version,ai_field_confidence,
+           ai_review_reasons,ai_uncertainties,ai_payload,created_at,updated_at)
         VALUES
           (${id}::uuid,${sourceId}::uuid,${o.sourceClause||null},${o.originalText||null},${o.obligation},
            ${o.applicability||null},${o.obligationType||"general"},${o.mandatoryLevel||"review"},
-           ${o.expectedEvidence||null},${o.testProcedure||null},'draft',now(),now())
+           ${o.expectedEvidence||null},${o.testProcedure||null},'draft',
+           ${Boolean(o.aiGenerated)},${o.confidence??null},${hybrid.engine},${o.schemaVersion||hybrid.schemaVersion||"v1"},
+           ${JSON.stringify(o.fieldConfidence||{})}::jsonb,${JSON.stringify(o.reviewReasons||[])}::jsonb,
+           ${JSON.stringify(o.uncertainties||[])}::jsonb,${JSON.stringify(o)}::jsonb,now(),now())
       `;
       persisted.push({...o,id,sourceId});
     }
