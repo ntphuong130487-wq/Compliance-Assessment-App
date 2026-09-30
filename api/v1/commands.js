@@ -56,6 +56,71 @@ export default async function handler(req,res){
     const command=String(req.body?.command||"");
     const p=req.body?.payload||{};
 
+    if(command==="source.create"){
+      assertPermission(user,"manage_framework");
+      const id=crypto.randomUUID();
+      const rows=await sql`
+        INSERT INTO compliance_sources
+          (id,source_type,code,title,version,effective_from,effective_to,owner,issuer,issue_date,status,
+           supersedes_ref,original_filename,mime_type,created_at,updated_at)
+        VALUES
+          (${id}::uuid,${p.sourceType||"Tệp đính kèm"},${p.sourceCode||null},${p.title},
+           ${p.version||null},${p.effectiveFrom||null}::date,${p.effectiveTo||null}::date,
+           ${p.owner||null},${p.issuer||null},${p.issueDate||null}::date,'draft',
+           ${p.supersedesRef||null},${p.fileName||null},${p.mimeType||null},now(),now())
+        RETURNING id::text,title,status
+      `;
+      return res.status(201).json({ok:true,record:rows[0]});
+    }
+
+    if(command==="source.update"){
+      assertPermission(user,"manage_framework");
+      const rows=await sql`
+        UPDATE compliance_sources SET
+          title=COALESCE(${p.title||null},title),
+          source_type=COALESCE(${p.sourceType||null},source_type),
+          code=${p.sourceCode||null},issuer=${p.issuer||null},issue_date=${p.issueDate||null}::date,
+          version=${p.version||null},effective_from=${p.effectiveFrom||null}::date,
+          effective_to=${p.effectiveTo||null}::date,owner=${p.owner||null},
+          supersedes_ref=${p.supersedesRef||null},updated_at=now()
+        WHERE id=${p.id}::uuid
+        RETURNING id::text,title,status
+      `;
+      if(!rows.length)return res.status(404).json({ok:false,error:"SOURCE_NOT_FOUND"});
+      return res.status(200).json({ok:true,record:rows[0]});
+    }
+
+    if(command==="framework.createManual"){
+      assertPermission(user,"manage_framework");
+      const code=String(p.code||"").trim().toUpperCase();
+      const items=Array.isArray(p.requirements)?p.requirements.map(x=>String(x||"").trim()).filter(Boolean):[];
+      if(!code||!p.name||!p.basis||!items.length)return res.status(400).json({ok:false,error:"MANUAL_FRAMEWORK_FIELDS_REQUIRED"});
+      const existing=await sql`SELECT 1 FROM compliance_frameworks WHERE code=${code}`;
+      if(existing.length)return res.status(409).json({ok:false,error:"FRAMEWORK_CODE_EXISTS"});
+      const sourceId=crypto.randomUUID(),frameworkId=crypto.randomUUID();
+      await sql`
+        INSERT INTO compliance_sources(id,source_type,code,title,status,owner,created_at,updated_at)
+        VALUES(${sourceId}::uuid,'Manual/Internal Interpretation',${code+"-SRC"},${"Manual/Internal Interpretation · "+p.name},'pending_approval',${user.id},now(),now())
+      `;
+      await sql`
+        INSERT INTO compliance_frameworks(id,code,name,version,status,owner,created_at,updated_at)
+        VALUES(${frameworkId}::uuid,${code},${p.name},'0.1','pending_approval',${user.id},now(),now())
+      `;
+      const created=[];
+      for(let i=0;i<items.length;i++){
+        const rid=crypto.randomUUID(),reqCode=code+"-"+String(i+1).padStart(3,"0");
+        await sql`
+          INSERT INTO compliance_requirements
+            (id,code,title,description,source_id,assessable,mandatory_level,test_procedure,expected_evidence,status,created_at)
+          VALUES
+            (${rid}::uuid,${reqCode},${items[i]},${p.basis},${sourceId}::uuid,true,'review','Cần xác định','Cần xác định','pending_approval',now())
+        `;
+        await sql`INSERT INTO framework_requirements(framework_id,requirement_id) VALUES(${frameworkId}::uuid,${rid}::uuid)`;
+        created.push({id:rid,code:reqCode});
+      }
+      return res.status(201).json({ok:true,record:{id:frameworkId,code,name:p.name,status:"pending_approval"},requirements:created});
+    }
+
     if(command==="assessment.create"){
       assertPermission(user,"manage_assessment");
       assertOrgScope(user,p.orgId);
