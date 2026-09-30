@@ -65,10 +65,25 @@ for(const control of [
   "INVALID_FINDING_DISPOSITION",
   "FINAL_FINDING_REQUIRED",
   "ACTION_OWNER_AND_TEXT_REQUIRED",
-  "ACTION_NOT_SUBMITTABLE"
+  "ACTION_NOT_SUBMITTABLE",
+  "ASSESSMENT_NOT_DRAFT",
+  "ASSESSMENT_REQUIREMENTS_REQUIRED",
+  "ASSESSMENT_NOT_IN_FIELDWORK",
+  "ASSESSMENT_REQUIREMENTS_INCOMPLETE",
+  "ASSESSMENT_FINDINGS_PENDING",
+  "ASSESSMENT_NOT_IN_REVIEW",
+  "ASSESSMENT_FIELDWORK_NOT_ACTIVE"
 ]){
   assert(commands.includes(control),"Business lifecycle control missing "+control);
 }
 
+
+for(const command of ["assessment.startFieldwork","assessment.submitForReview","assessment.close"]){
+  assert(commands.includes(command),"Assessment lifecycle command missing "+command);
+}
+assert(app.includes("startAssessment")&&app.includes("submitAssessmentReview")&&app.includes("closeAssessment"),
+  "Assessment lifecycle UI wiring missing");
+assert(screens.includes("Phạm vi đã khóa")&&screens.includes("Fieldwork không hoạt động"),
+  "Assessment scope-freeze UX missing");
 
 console.log("PASS - Product v1 UI + business regression controls");
