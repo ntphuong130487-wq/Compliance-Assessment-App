@@ -23,6 +23,7 @@ function normalizeState(s){
   (s.sources||[]).forEach(function(x){x.sourceCode=x.sourceCode||"";x.issuer=x.issuer||"";x.issueDate=x.issueDate||"";x.effectiveFrom=x.effectiveFrom||"";x.effectiveTo=x.effectiveTo||"";x.version=x.version||"";x.supersedesRef=x.supersedesRef||"";x.owner=x.owner||""});
   (s.actions||[]).forEach(function(a){a.closureEvidenceIds=a.closureEvidenceIds||[];a.createdAt=a.createdAt||null;a.actionType=a.actionType||"mandatory_remediation";a.progress=Number(a.progress||0)});
   s.actionChangeRequests=s.actionChangeRequests||[];
+  s.requirementAssignments=s.requirementAssignments||[];
   s.notifications=s.notifications||[];
   s.notificationSettings=s.notificationSettings||{inApp:true,overdueEscalation:true};
   return s
@@ -617,6 +618,8 @@ function bind(){
     if(x==="finding"&&guard("confirm_finding",a))finding();
     if(x==="setResult")setRequirementResult();
   }});
+  function assessmentAssignmentContext(){return{S:S,modal:modal,apiCommand:apiCommand,syncMode:syncMode,save:save,render:render,esc:esc,currentId:ComplianceAccess.current().id,now:now,id:id,ComplianceAccess:ComplianceAccess}}
+  document.querySelectorAll("[data-assignment]").forEach(function(b){b.onclick=function(){ComplianceAssessmentAssignment.open(assessmentAssignmentContext(),b.dataset.assignment)}});
   document.querySelectorAll("[data-assessment-start]").forEach(function(b){b.onclick=function(){startAssessment(b.dataset.assessmentStart)}});
   document.querySelectorAll("[data-assessment-review]").forEach(function(b){b.onclick=function(){if(!b.disabled)submitAssessmentReview(b.dataset.assessmentReview)}});
   document.querySelectorAll("[data-assessment-close]").forEach(function(b){b.onclick=function(){closeAssessment(b.dataset.assessmentClose)}});
