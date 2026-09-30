@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
-import { extractObligations } from "../../lib/obligation-extractor.js";
+import { extractDocumentText, documentIntelligenceReadiness } from "../../lib/document-intelligence.js";
+import { extractObligationsHybrid, aiExtractionReadiness } from "../../lib/ai-obligation-extractor.js";
 import { normalizedMode, sqlClient, asUuid } from "../../lib/db.js";
 import { requireUser, assertPermission } from "../../lib/server-authz.js";
 
@@ -16,34 +17,14 @@ async function readBody(req){
   return Buffer.concat(chunks);
 }
 
-async function extractText(buffer,name,type){
-  const lower=(name||"").toLowerCase();
-  if(type.startsWith("text/")||/\.(txt|md|csv|json|xml|html?)$/.test(lower)){
-    return buffer.toString("utf8");
-  }
-  if(type==="application/pdf"||lower.endsWith(".pdf")){
-    const mod=await import("pdf-parse");
-    const pdf=mod.default||mod;
-    const data=await pdf(buffer);
-    return data.text||"";
-  }
-  if(/wordprocessingml|msword/.test(type)||lower.endsWith(".docx")){
-    const mod=await import("mammoth");
-    const mammoth=mod.default||mod;
-    const data=await mammoth.extractRawText({buffer});
-    return data.value||"";
-  }
-  throw Object.assign(new Error("UNSUPPORTED_FILE"),{code:"UNSUPPORTED_FILE"});
-}
-
 export default async function handler(req,res){
   res.setHeader("Cache-Control","no-store");
   if(req.method==="GET"){
     return res.status(200).json({
       ok:true,
-      supported:["txt","md","csv","json","xml","html","pdf","docx"],
+      ...documentIntelligenceReadiness(),
       maxBytes:MAX_BYTES,
-      ocrConfigured:false
+      ai:aiExtractionReadiness()
     });
   }
   if(req.method!=="POST"){
@@ -54,12 +35,14 @@ export default async function handler(req,res){
     const body=await readBody(req);
     const name=decodeURIComponent(String(req.headers["x-file-name"]||"source"));
     const type=String(req.headers["content-type"]||"application/octet-stream");
-    const text=await extractText(body,name,type);
-    if(!String(text||"").trim()||String(text).trim().length<20){
-      return res.status(422).json({ok:false,error:"OCR_REQUIRED",ocrRequired:true,name,type});
+    const extracted=await extractDocumentText(body,{name,type,minTextLength:20});
+    if(extracted.ocrRequired){
+      return res.status(422).json({ok:false,error:"OCR_REQUIRED",ocrRequired:true,name,type,method:extracted.method,ocrConfigured:documentIntelligenceReadiness().ocrConfigured});
     }
+    const text=extracted.text;
     let sourceId=String(req.headers["x-source-id"]||"");
-    let obligations=extractObligations(text,sourceId||null);
+    const hybrid=await extractObligationsHybrid(text,sourceId||null,{preferAI:true});
+    let obligations=hybrid.obligations;
 
     if(normalizedMode()){
       const auth=await requireUser(req);
@@ -95,12 +78,17 @@ export default async function handler(req,res){
     return res.status(200).json({
       ok:true,name,type,text:text.slice(0,250000),
       count:obligations.length,obligations,
-      engine:"file-text+rule-v0.2",
+      engine:hybrid.engine,
+      aiUsed:hybrid.aiUsed,
+      aiFallback:Boolean(hybrid.aiFallback),
+      humanReviewRequired:true,
+      extraction:{method:extracted.method,ocrUsed:Boolean(extracted.ocrUsed),confidence:extracted.confidence??null},
       persisted:normalizedMode()
     });
   }catch(error){
     if(error?.code==="FILE_TOO_LARGE")return res.status(413).json({ok:false,error:"FILE_TOO_LARGE"});
-    if(error?.code==="UNSUPPORTED_FILE")return res.status(415).json({ok:false,error:"UNSUPPORTED_FILE",ocrRequired:true});
+    if(error?.code==="UNSUPPORTED_FILE")return res.status(415).json({ok:false,error:"UNSUPPORTED_FILE",ocrRequired:false});
+    if(error?.code==="OCR_PROVIDER_ERROR"||error?.code==="OCR_EMPTY_RESULT")return res.status(502).json({ok:false,error:error.code});
     console.error("source extract error",error);
     return res.status(500).json({ok:false,error:"SOURCE_EXTRACTION_ERROR"});
   }
