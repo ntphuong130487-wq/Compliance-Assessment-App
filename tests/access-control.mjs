@@ -29,6 +29,7 @@ A.setPersona("p_manager");
 assert(A.can("approve_framework"),"Compliance manager must approve framework");
 assert(A.can("review_assessment"),"Compliance manager should review/close assessments");
 assert(A.can("approve_action_change"),"Compliance manager should approve action due-date changes");
+assert(A.can("assign_assessment_work"),"Compliance manager should assign requirement work");
 
 A.setPersona("p_assessor");
 assert(A.can("conduct_fieldwork",{assessment:{orgId:"agric"}}),"Assessor should work in assigned org");
