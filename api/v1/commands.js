@@ -476,6 +476,120 @@ export default async function handler(req,res){
       return res.status(201).json({ok:true,record:rows[0]});
     }
 
+    if(command==="action.updateProgress"){
+      const ctx=await actionContext(sql,p.actionId);if(!ctx)return res.status(404).json({ok:false,error:"ACTION_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      if(!["open","reopened"].includes(ctx.status))return res.status(409).json({ok:false,error:"ACTION_PROGRESS_NOT_EDITABLE"});
+      const isOwner=ctx.ownerIdentityId===user.id;
+      if(!isOwner&&!hasPermission(user,"update_assigned_action")&&!hasPermission(user,"assign_action")){
+        return res.status(403).json({ok:false,error:"FORBIDDEN"});
+      }
+      const progress=Number(p.progress);
+      const note=String(p.note||"").trim();
+      if(!Number.isInteger(progress)||progress<0||progress>100)return res.status(400).json({ok:false,error:"INVALID_ACTION_PROGRESS"});
+      if(!note)return res.status(400).json({ok:false,error:"ACTION_PROGRESS_NOTE_REQUIRED"});
+      const before=await sql`SELECT progress FROM remediation_actions WHERE id=${p.actionId}::uuid`;
+      const previous=Number(before[0]?.progress||0);
+      await sql.transaction([
+        sql`UPDATE remediation_actions SET progress=${progress},updated_at=now() WHERE id=${p.actionId}::uuid`,
+        sql`
+          INSERT INTO decision_logs
+            (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
+          VALUES
+            (${crypto.randomUUID()}::uuid,'RemediationAction',${p.actionId}::uuid,'progress_update',
+             ${String(previous)},${String(progress)},${note},${user.id},now(),
+             ${JSON.stringify({previousProgress:previous,newProgress:progress})}::jsonb,'compliance-app')
+        `
+      ]);
+      return res.status(200).json({ok:true,progress,previousProgress:previous});
+    }
+
+    if(command==="action.requestDueDateChange"){
+      const ctx=await actionContext(sql,p.actionId);if(!ctx)return res.status(404).json({ok:false,error:"ACTION_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      if(!["open","reopened"].includes(ctx.status))return res.status(409).json({ok:false,error:"ACTION_DUE_DATE_NOT_EDITABLE"});
+      const isOwner=ctx.ownerIdentityId===user.id;
+      if(!isOwner&&!hasPermission(user,"update_assigned_action")&&!hasPermission(user,"assign_action")){
+        return res.status(403).json({ok:false,error:"FORBIDDEN"});
+      }
+      const requestedDueDate=String(p.requestedDueDate||"").trim();
+      const reason=String(p.reason||"").trim();
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(requestedDueDate))return res.status(400).json({ok:false,error:"VALID_REQUESTED_DUE_DATE_REQUIRED"});
+      if(!reason)return res.status(400).json({ok:false,error:"DUE_DATE_CHANGE_REASON_REQUIRED"});
+      const action=await sql`SELECT due_date AS "dueDate" FROM remediation_actions WHERE id=${p.actionId}::uuid`;
+      const currentDue=action[0]?.dueDate?String(action[0].dueDate).slice(0,10):null;
+      if(currentDue===requestedDueDate)return res.status(409).json({ok:false,error:"DUE_DATE_UNCHANGED"});
+      const pending=await sql`
+        SELECT id::text FROM remediation_action_change_requests
+        WHERE action_id=${p.actionId}::uuid AND request_type='due_date_change' AND status='pending'
+      `;
+      if(pending.length)return res.status(409).json({ok:false,error:"DUE_DATE_CHANGE_ALREADY_PENDING"});
+      const id=crypto.randomUUID();
+      await sql`
+        INSERT INTO remediation_action_change_requests
+          (id,action_id,request_type,current_due_date,requested_due_date,reason,requested_by,requested_at,status)
+        VALUES
+          (${id}::uuid,${p.actionId}::uuid,'due_date_change',${currentDue}::date,${requestedDueDate}::date,
+           ${reason},${user.id},now(),'pending')
+      `;
+      await sql`
+        INSERT INTO decision_logs
+          (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
+        VALUES
+          (${crypto.randomUUID()}::uuid,'RemediationAction',${p.actionId}::uuid,'due_date_change_requested',
+           ${currentDue},${requestedDueDate},${reason},${user.id},now(),
+           ${JSON.stringify({requestId:id})}::jsonb,'compliance-app')
+      `;
+      return res.status(201).json({ok:true,requestId:id,status:"pending",currentDueDate:currentDue,requestedDueDate});
+    }
+
+    if(command==="action.decideDueDateChange"){
+      assertPermission(user,"approve_action_change");
+      const requestId=String(p.requestId||"").trim();
+      const decision=String(p.decision||"");
+      const decisionNote=String(p.decisionNote||"").trim();
+      if(!["approved","rejected"].includes(decision))return res.status(400).json({ok:false,error:"INVALID_DUE_DATE_DECISION"});
+      if(decision==="rejected"&&!decisionNote)return res.status(400).json({ok:false,error:"DUE_DATE_DECISION_NOTE_REQUIRED"});
+      const reqRows=await sql`
+        SELECT id::text,action_id::text AS "actionId",current_due_date AS "currentDueDate",
+               requested_due_date AS "requestedDueDate",reason,requested_by AS "requestedBy",status
+        FROM remediation_action_change_requests WHERE id=${requestId}::uuid
+      `;
+      const change=reqRows[0];if(!change)return res.status(404).json({ok:false,error:"ACTION_CHANGE_REQUEST_NOT_FOUND"});
+      if(change.status!=="pending")return res.status(409).json({ok:false,error:"ACTION_CHANGE_REQUEST_NOT_PENDING"});
+      const ctx=await actionContext(sql,change.actionId);if(!ctx)return res.status(404).json({ok:false,error:"ACTION_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      if(change.requestedBy===user.id)return res.status(409).json({ok:false,error:"SELF_APPROVAL_FORBIDDEN"});
+      if(!["open","reopened"].includes(ctx.status))return res.status(409).json({ok:false,error:"ACTION_DUE_DATE_NOT_EDITABLE"});
+      const metadata=JSON.stringify({requestId,requestedBy:change.requestedBy,requestReason:change.reason});
+      const statements=[
+        sql`
+          UPDATE remediation_action_change_requests
+          SET status=${decision},decided_by=${user.id},decided_at=now(),decision_note=${decisionNote||null}
+          WHERE id=${requestId}::uuid AND status='pending'
+        `,
+        sql`
+          INSERT INTO decision_logs
+            (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
+          VALUES
+            (${crypto.randomUUID()}::uuid,'RemediationAction',${change.actionId}::uuid,'due_date_change_'+${decision},
+             ${change.currentDueDate?String(change.currentDueDate).slice(0,10):null},
+             ${change.requestedDueDate?String(change.requestedDueDate).slice(0,10):null},
+             ${decisionNote||change.reason},${user.id},now(),${metadata}::jsonb,'compliance-app')
+        `
+      ];
+      if(decision==="approved"){
+        statements.unshift(sql`
+          UPDATE remediation_actions
+          SET due_date=${String(change.requestedDueDate).slice(0,10)}::date,updated_at=now()
+          WHERE id=${change.actionId}::uuid
+        `);
+      }
+      await sql.transaction(statements);
+      return res.status(200).json({ok:true,status:decision,actionId:change.actionId,
+        dueDate:decision==="approved"?String(change.requestedDueDate).slice(0,10):undefined});
+    }
+
     if(command==="action.submitForVerification"){
       const ctx=await actionContext(sql,p.actionId);if(!ctx) return res.status(404).json({ok:false,error:"ACTION_NOT_FOUND"});
       assertOrgScope(user,ctx.orgId);
