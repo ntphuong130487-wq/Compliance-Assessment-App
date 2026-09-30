@@ -12,6 +12,7 @@ const commands=read("api/v1/commands.js");
 const authz=read("lib/server-authz.js");
 const users=read("lib/user-routes.js");
 const actionGovernance=read("src/workflows/action-governance.js");
+const assessmentAssignment=read("src/workflows/assessment-assignment.js");
 
 for(const asset of ["/src/styles/product-v1.css","/src/ui/product-ui.js"]){
   assert(index.includes(asset),"Missing product asset "+asset);
@@ -88,7 +89,15 @@ for(const control of [
   "INVALID_DUE_DATE_DECISION",
   "DUE_DATE_DECISION_NOTE_REQUIRED",
   "ACTION_CHANGE_REQUEST_NOT_PENDING",
-  "SELF_APPROVAL_FORBIDDEN"
+  "SELF_APPROVAL_FORBIDDEN",
+  "ASSESSMENT_ASSIGNMENT_LOCKED",
+  "NO_ASSIGNMENTS",
+  "ASSIGNMENT_REQUIREMENT_SCOPE_MISMATCH",
+  "ASSIGNEE_NOT_ACTIVE",
+  "ASSIGNEE_CANNOT_CONDUCT_FIELDWORK",
+  "ASSIGNEE_OUTSIDE_ORG_SCOPE",
+  "ASSESSMENT_ASSIGNMENTS_INCOMPLETE",
+  "REQUIREMENT_NOT_ASSIGNED_TO_USER"
 ]){
   assert(commands.includes(control),"Business lifecycle control missing "+control);
 }
@@ -115,5 +124,12 @@ for(const fn of ["updateProgress","requestDueDateChange","decideDueDateChange"])
 assert(screens.includes("Đổi hạn chờ duyệt")&&screens.includes("Cập nhật")&&screens.includes("Đề nghị đổi hạn"),
   "Action governance UX missing");
 assert(index.includes("/src/workflows/action-governance.js"),"Action governance module not loaded");
+assert(commands.includes("assessment.assignRequirements"),"Requirement assignment command missing");
+assert(authz.includes("assign_assessment_work"),"Requirement assignment permission missing");
+assert(assessmentAssignment.includes("Người kiểm tra chính")&&assessmentAssignment.includes("assessment.assignRequirements"),
+  "Requirement assignment workflow missing");
+assert(screens.includes("yêu cầu chưa phân công người kiểm tra")&&screens.includes("Người kiểm tra chính"),
+  "Requirement assignment UX missing");
+assert(index.includes("/src/workflows/assessment-assignment.js"),"Requirement assignment module not loaded");
 
 console.log("PASS - Product v1 UI + business regression controls");
