@@ -1,5 +1,8 @@
 import fs from "node:fs";
-const html=fs.readFileSync("index.html","utf8");
+const shell=fs.readFileSync("index.html","utf8");
+const app=fs.readFileSync("src/app.js","utf8");
+const css=fs.readFileSync("src/styles/app.css","utf8");
+const html=shell+"\n"+app+"\n"+css;
 const checks=[
   ["7 màn hình",["Điều hành","Khung tuân thủ","Chương trình đánh giá","Kiểm tra hiện trường","Phát hiện","Khắc phục","Báo cáo"].every(x=>html.includes(x))],
   ["human-in-the-loop",html.includes("AI chỉ đề xuất")&&html.includes("Tạo Phát hiện dự thảo")&&html.includes("Chốt Phát hiện")],
@@ -41,9 +44,7 @@ const checks=[
   ["admin operations settings",html.includes("Cấu hình vận hành")&&html.includes("saveNotifySettings")&&html.includes("reminderBeforeDueDays")],
   ["page filters",html.includes("assessmentStatusFilter")&&html.includes("findingSeverityFilter")&&html.includes("actionOwnerFilter")]
 ];
-const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
-if(!scripts.length) throw new Error("Không tìm thấy script");
-for(const s of scripts) new Function(s);
+new Function(app);
 const failed=checks.filter(x=>!x[1]);
 for(const [name,ok] of checks) console.log((ok?"PASS":"FAIL")+" - "+name);
 if(failed.length) process.exit(1);
