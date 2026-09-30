@@ -56,6 +56,51 @@ export default async function handler(req,res){
     const command=String(req.body?.command||"");
     const p=req.body?.payload||{};
 
+    if(command==="assessment.create"){
+      assertPermission(user,"manage_assessment");
+      assertOrgScope(user,p.orgId);
+      const assessmentId=crypto.randomUUID(),scopeId=crypto.randomUUID();
+      const reqIds=Array.isArray(p.requirementIds)?p.requirementIds.filter(Boolean):[];
+      if(!reqIds.length) return res.status(400).json({ok:false,error:"NO_APPLICABLE_REQUIREMENTS"});
+
+      const framework=await sql`SELECT id::text,status FROM compliance_frameworks WHERE id=${p.frameworkId}::uuid`;
+      if(!framework.length) return res.status(404).json({ok:false,error:"FRAMEWORK_NOT_FOUND"});
+
+      const eligible=await sql`
+        SELECT r.id::text
+        FROM compliance_requirements r
+        JOIN framework_requirements fr ON fr.requirement_id=r.id
+        WHERE fr.framework_id=${p.frameworkId}::uuid
+          AND r.status='effective'
+          AND r.id::text = ANY(${reqIds})
+      `;
+      if(eligible.length!==reqIds.length) return res.status(409).json({ok:false,error:"REQUIREMENT_SET_INVALID"});
+
+      await sql`
+        INSERT INTO compliance_assessments
+          (id,framework_id,name,objective,period_from,period_to,status,lead_assessor,reviewer,unit_representative,created_at,updated_at)
+        VALUES
+          (${assessmentId}::uuid,${p.frameworkId}::uuid,${p.name},${p.objective||null},
+           ${p.periodFrom||null}::date,${p.periodTo||null}::date,'draft',
+           ${p.leadAssessor||null},${p.reviewer||null},${p.unitRepresentative||null},now(),now())
+      `;
+      await sql`
+        INSERT INTO assessment_scopes
+          (id,assessment_id,org_unit_id,process_ref,activity_ref,location_ref,scope_note,include_all_requirements)
+        VALUES
+          (${scopeId}::uuid,${assessmentId}::uuid,${p.orgId}::uuid,${p.processRef||null},
+           ${p.activityRef||null},${p.locationRef||null},${p.scopeNote||null},false)
+      `;
+      for(const r of eligible){
+        await sql`
+          INSERT INTO requirement_assessments
+            (id,assessment_id,requirement_id,workflow_status,compliance_result)
+          VALUES(${crypto.randomUUID()}::uuid,${assessmentId}::uuid,${r.id}::uuid,'to_do','not_assessed')
+        `;
+      }
+      return res.status(201).json({ok:true,record:{id:assessmentId,status:"draft",requirementCount:eligible.length}});
+    }
+
     if(command==="requirementAssessment.update"){
       assertPermission(user,"conduct_fieldwork");
       const orgId=await assessmentOrg(sql,p.assessmentId);assertOrgScope(user,orgId);
