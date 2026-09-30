@@ -16,7 +16,7 @@ function seed(){
 function normalizeState(s){
   s=s||seed();
   if(s.meta&&s.meta.demo&&s.meta.version!=="0.8-demo"&&window.AgriSComplianceDemoState)s=seed();
-  s.responses=s.responses||[];s.sources=s.sources||[];s.draftRequirements=s.draftRequirements||[];
+  s.responses=s.responses||[];s.sources=s.sources||[];s.draftRequirements=s.draftRequirements||[];s.draftReviewEvents=s.draftReviewEvents||[];
   (s.requirements||[]).forEach(function(r){if(!r.status)r.status="effective"});
   (s.assessments||[]).forEach(function(a){a.processRef=a.processRef||"";a.activityRef=a.activityRef||"";a.locationRef=a.locationRef||"";a.periodFrom=a.periodFrom||"";a.periodTo=a.periodTo||""});
   (s.findings||[]).forEach(function(f){if(f.status==="confirmed")f.status="final"});
