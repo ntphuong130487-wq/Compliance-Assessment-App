@@ -101,7 +101,8 @@ assert(app.includes("startAssessment")&&app.includes("submitAssessmentReview")&&
   "Assessment lifecycle UI wiring missing");
 assert(screens.includes("Phạm vi đã khóa")&&screens.includes("Fieldwork không hoạt động"),
   "Assessment scope-freeze UX missing");
-assert(app.includes("remediationRequired")&&app.includes("remediationRequirement")&&app.includes("mandatory_remediation")&&app.includes("improvement_action"),
+const workflowSurface=app+"\n"+actionGovernance;
+assert(workflowSurface.includes("remediationRequired")&&workflowSurface.includes("remediationRequirement")&&workflowSurface.includes("mandatory_remediation")&&workflowSurface.includes("improvement_action"),
   "Recommendation/remediation distinction missing in workflow");
 assert(screens.includes("Yêu cầu khắc phục bắt buộc")&&screens.includes("Khắc phục bắt buộc"),
   "Recommendation/remediation distinction missing in product screens");
