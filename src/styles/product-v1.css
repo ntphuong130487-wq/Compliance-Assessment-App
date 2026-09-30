@@ -188,3 +188,8 @@ table tbody tr:hover{background:#f7faf8}
 .audit-event b{color:var(--product-ink)}
 .audit-event span{color:var(--product-muted)}
 @media(max-width:760px){.audit-event{grid-template-columns:1fr}}
+
+.closure-evidence-list{display:grid;gap:5px;margin-top:7px}
+.closure-evidence-item{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 7px;border:1px solid var(--product-line);border-radius:8px;background:#fafbfa;font-size:10px}
+.closure-evidence-item>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.closure-evidence-item .btn{padding:3px 6px;font-size:9px;margin-left:4px}
