@@ -4,6 +4,7 @@ const migration=fs.readFileSync("db/migrations/002_p2_operational.sql","utf8");
 const clerkMigration=fs.readFileSync("db/migrations/003_clerk_neon_auth.sql","utf8");
 const aiMigration=fs.readFileSync("db/migrations/005_ai_obligation_intelligence.sql","utf8");
 const auditMigration=fs.readFileSync("db/migrations/006_ai_review_audit.sql","utf8");
+const remediationMigration=fs.readFileSync("db/migrations/007_finding_remediation_model.sql","utf8");
 function assert(ok,msg){if(!ok)throw new Error(msg)}
 for(const name of ["app_users","user_org_scopes","notifications","user_notification_reads"]){
   assert(schema.includes("CREATE TABLE IF NOT EXISTS "+name),"Canonical schema missing "+name);
@@ -23,4 +24,11 @@ for(const col of ["metadata","source"]){
   assert(auditMigration.includes(col),"AI review audit migration missing "+col);
 }
 assert(auditMigration.includes("idx_decision_draft_review"),"AI review audit index missing");
+for(const col of ["remediation_required","remediation_requirement","action_type"]){
+  assert(schema.includes(col),"Canonical schema missing remediation field "+col);
+  assert(remediationMigration.includes(col),"Remediation migration missing "+col);
+}
+assert(remediationMigration.includes("mandatory_remediation")&&remediationMigration.includes("improvement_action"),
+  "Remediation action taxonomy missing");
+assert(remediationMigration.includes("chk_remediation_action_type"),"Remediation action type constraint missing");
 console.log("PASS - normalized schema + Clerk + AI obligation metadata + human-review audit readiness");
