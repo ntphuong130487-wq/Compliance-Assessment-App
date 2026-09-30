@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { sqlClient, normalizedMode, normalizedReady, publicError } from "../../lib/db.js";
-import { requireUser, assertPermission, assertOrgScope } from "../../lib/server-authz.js";
+import { requireUser, assertPermission, assertOrgScope, hasPermission } from "../../lib/server-authz.js";
+
+function dateOnly(v){if(!v)return null;if(v instanceof Date)return v.toISOString().slice(0,10);const s=String(v);return /^\d{4}-\d{2}-\d{2}/.test(s)?s.slice(0,10):null;}
 
 async function assessmentOrg(sql,assessmentId){
   const rows=await sql`
@@ -517,7 +519,7 @@ export default async function handler(req,res){
       if(!/^\d{4}-\d{2}-\d{2}$/.test(requestedDueDate))return res.status(400).json({ok:false,error:"VALID_REQUESTED_DUE_DATE_REQUIRED"});
       if(!reason)return res.status(400).json({ok:false,error:"DUE_DATE_CHANGE_REASON_REQUIRED"});
       const action=await sql`SELECT due_date AS "dueDate" FROM remediation_actions WHERE id=${p.actionId}::uuid`;
-      const currentDue=action[0]?.dueDate?String(action[0].dueDate).slice(0,10):null;
+      const currentDue=dateOnly(action[0]?.dueDate);
       if(currentDue===requestedDueDate)return res.status(409).json({ok:false,error:"DUE_DATE_UNCHANGED"});
       const pending=await sql`
         SELECT id::text FROM remediation_action_change_requests
@@ -562,6 +564,9 @@ export default async function handler(req,res){
       if(change.requestedBy===user.id)return res.status(409).json({ok:false,error:"SELF_APPROVAL_FORBIDDEN"});
       if(!["open","reopened"].includes(ctx.status))return res.status(409).json({ok:false,error:"ACTION_DUE_DATE_NOT_EDITABLE"});
       const metadata=JSON.stringify({requestId,requestedBy:change.requestedBy,requestReason:change.reason});
+      const decisionType="due_date_change_"+decision;
+      const requestedDue=dateOnly(change.requestedDueDate);
+      const priorDue=dateOnly(change.currentDueDate);
       const statements=[
         sql`
           UPDATE remediation_action_change_requests
@@ -572,22 +577,22 @@ export default async function handler(req,res){
           INSERT INTO decision_logs
             (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
           VALUES
-            (${crypto.randomUUID()}::uuid,'RemediationAction',${change.actionId}::uuid,'due_date_change_'+${decision},
-             ${change.currentDueDate?String(change.currentDueDate).slice(0,10):null},
-             ${change.requestedDueDate?String(change.requestedDueDate).slice(0,10):null},
+            (${crypto.randomUUID()}::uuid,'RemediationAction',${change.actionId}::uuid,${decisionType},
+             ${priorDue},
+             ${requestedDue},
              ${decisionNote||change.reason},${user.id},now(),${metadata}::jsonb,'compliance-app')
         `
       ];
       if(decision==="approved"){
         statements.unshift(sql`
           UPDATE remediation_actions
-          SET due_date=${String(change.requestedDueDate).slice(0,10)}::date,updated_at=now()
+          SET due_date=${requestedDue}::date,updated_at=now()
           WHERE id=${change.actionId}::uuid
         `);
       }
       await sql.transaction(statements);
       return res.status(200).json({ok:true,status:decision,actionId:change.actionId,
-        dueDate:decision==="approved"?String(change.requestedDueDate).slice(0,10):undefined});
+        dueDate:decision==="approved"?requestedDue:undefined});
     }
 
     if(command==="action.submitForVerification"){
