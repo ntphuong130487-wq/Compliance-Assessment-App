@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { put, get } from "@vercel/blob";
+import { put, get, del } from "@vercel/blob";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { clerkConfigured, userContext } from "../lib/clerk-auth.js";
@@ -163,6 +163,28 @@ export default async function handler(req,res){
   if(!session.provisioned||session.status!=="active")return res.status(403).json({ok:false,error:"USER_NOT_PROVISIONED"});
 
   try{
+    let sql=null,ctx=null,targetType="",targetId="",purpose="supporting_evidence";
+    if(normalizedMode()){
+      targetType=String(req.headers["x-target-type"]||"");
+      targetId=String(req.headers["x-target-id"]||"");
+      purpose=String(req.headers["x-evidence-purpose"]||"supporting_evidence");
+      if(!["RequirementAssessment","RemediationAction"].includes(targetType)||!targetId){
+        return res.status(400).json({ok:false,error:"NORMALIZED_TARGET_REQUIRED"});
+      }
+      sql=sqlClient();
+      ctx=await targetContext(sql,targetType,targetId);
+      if(!ctx)return res.status(404).json({ok:false,error:"TARGET_NOT_FOUND"});
+      assertOrgScope(session,ctx.orgId);
+      if(targetType==="RequirementAssessment"&&!hasPermission(session,"conduct_fieldwork")){
+        return res.status(403).json({ok:false,error:"FORBIDDEN"});
+      }
+      if(targetType==="RemediationAction"){
+        const owner=ctx.ownerIdentityId===session.id;
+        const allowed=owner||hasPermission(session,"update_assigned_action")||hasPermission(session,"assign_action");
+        if(!allowed)return res.status(403).json({ok:false,error:"FORBIDDEN"});
+      }
+    }
+
     const body=await readBody(req);
     const original=(req.headers["x-file-name"]||"evidence.bin").toString();
     const safe=original.replace(/[^a-zA-Z0-9._-]+/g,"_").slice(-160);
@@ -174,41 +196,35 @@ export default async function handler(req,res){
 
     let normalizedRecord=null;
     if(normalizedMode()){
-      const targetType=String(req.headers["x-target-type"]||"");
-      const targetId=String(req.headers["x-target-id"]||"");
-      const purpose=String(req.headers["x-evidence-purpose"]||"supporting_evidence");
-      if(!["RequirementAssessment","RemediationAction"].includes(targetType)||!targetId){
-        return res.status(400).json({ok:false,error:"NORMALIZED_TARGET_REQUIRED"});
-      }
-      const sql=sqlClient();
-      const ctx=await targetContext(sql,targetType,targetId);
-      if(!ctx)return res.status(404).json({ok:false,error:"TARGET_NOT_FOUND"});
-      assertOrgScope(session,ctx.orgId);
-      if(targetType==="RequirementAssessment"&&!hasPermission(session,"conduct_fieldwork")){
-        return res.status(403).json({ok:false,error:"FORBIDDEN"});
-      }
-      if(targetType==="RemediationAction"){
-        const owner=ctx.ownerIdentityId===session.id;
-        const allowed=owner||hasPermission(session,"update_assigned_action")||hasPermission(session,"assign_action");
-        if(!allowed)return res.status(403).json({ok:false,error:"FORBIDDEN"});
-      }
-
       const evidenceId=crypto.randomUUID(),revisionId=crypto.randomUUID(),linkId=crypto.randomUUID();
       const sha256=crypto.createHash("sha256").update(body).digest("hex");
-      await sql`
-        INSERT INTO evidence(id,name,evidence_type,source_system,confidentiality,status,owner_user_id,org_unit_id,created_at)
-        VALUES(${evidenceId}::uuid,${original},${contentType},'Vercel Blob','internal','active',${session.id},${ctx.orgId}::uuid,now())
-      `;
-      await sql`
-        INSERT INTO evidence_revisions
-          (id,evidence_id,version,file_uri,original_filename,mime_type,sha256,captured_at,file_size,storage_provider,created_at)
-        VALUES
-          (${revisionId}::uuid,${evidenceId}::uuid,1,${blob.url},${original},${contentType},${sha256},now(),${body.length},'vercel_blob',now())
-      `;
-      await sql`
-        INSERT INTO evidence_links(id,evidence_revision_id,target_type,target_id,purpose,linked_by,linked_at)
-        VALUES(${linkId}::uuid,${revisionId}::uuid,${targetType},${targetId}::uuid,${purpose},${session.id},now())
-      `;
+      try{
+        await sql.transaction([
+          sql`
+            INSERT INTO evidence(id,name,evidence_type,source_system,confidentiality,status,owner_user_id,org_unit_id,created_at)
+            VALUES(${evidenceId}::uuid,${original},${contentType},'Vercel Blob','internal','active',${session.id},${ctx.orgId}::uuid,now())
+          `,
+          sql`
+            INSERT INTO evidence_revisions
+              (id,evidence_id,version,file_uri,original_filename,mime_type,sha256,captured_at,file_size,storage_provider,created_at)
+            VALUES
+              (${revisionId}::uuid,${evidenceId}::uuid,1,${blob.url},${original},${contentType},${sha256},now(),${body.length},'vercel_blob',now())
+          `,
+          sql`
+            INSERT INTO evidence_links(id,evidence_revision_id,target_type,target_id,purpose,linked_by,linked_at)
+            VALUES(${linkId}::uuid,${revisionId}::uuid,${targetType},${targetId}::uuid,${purpose},${session.id},now())
+          `
+        ]);
+      }catch(error){
+        try{
+          const deleteOptions={};
+          if(process.env.BLOB_READ_WRITE_TOKEN)deleteOptions.token=process.env.BLOB_READ_WRITE_TOKEN;
+          await del(blob.url,deleteOptions);
+        }catch(cleanupError){
+          console.error("evidence blob cleanup error",cleanupError);
+        }
+        throw error;
+      }
       normalizedRecord={evidenceId,revisionId,linkId,sha256,targetType,targetId,purpose};
     }
 
