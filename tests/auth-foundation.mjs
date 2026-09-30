@@ -11,3 +11,9 @@ assert(!A.allowedEmail("user@gmail.com"),"Unapproved domain should fail");
 assert(A.normalizeRole("compliance_manager")==="compliance_manager","Known role normalization failed");
 assert(A.normalizeRole("unknown_role")==="viewer","Unknown role should fall back to viewer");
 console.log("PASS - Clerk auth/provisioning foundation");
+
+const userRoutes=read("lib/user-routes.js");
+const clerkAuth=read("lib/clerk-auth.js");
+assert(userRoutes.includes("self-signup-preprovisioned"),"Pre-provision access model missing");
+assert(clerkAuth.includes("FROM app_users WHERE lower(email)="),"DB-backed user provisioning lookup missing");
+assert(!userRoutes.includes("createInvitation({"),"Paid/custom-domain Clerk invitation path should not be required");
