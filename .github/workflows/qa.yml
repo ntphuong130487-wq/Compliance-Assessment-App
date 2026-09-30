@@ -29,6 +29,8 @@ jobs:
         run: node tests/product-v1-regression.mjs
       - name: Run OCR and AI foundation QA
         run: node tests/intelligence-foundation.mjs
+      - name: Run product view-model behavior QA
+        run: node tests/view-models.mjs
       - name: Check application syntax
         run: |
           node --check access-control.js
@@ -45,6 +47,7 @@ jobs:
           node --check lib/document-intelligence.js
           node --check lib/ai-obligation-extractor.js
           node --check src/ui/product-ui.js
+          node --check src/ui/view-models.js
           node --check api/obligations/extract.js
           node --check api/source/extract.js
           node --check api/regulations/search.js
