@@ -25,6 +25,8 @@ jobs:
         run: node tests/db-schema.mjs
       - name: Run Production Core QA
         run: node tests/production-core.mjs
+      - name: Run evidence security QA
+        run: node tests/evidence-security.mjs
       - name: Run Product v1 business regression
         run: node tests/product-v1-regression.mjs
       - name: Run OCR and AI foundation QA
@@ -86,6 +88,7 @@ jobs:
           node --check scripts/db-migrate.mjs
           node --check tests/browser-server.mjs
           node --check tests/browser-product.mjs
+          node --check tests/evidence-security.mjs
 
   migration-dry-run:
     runs-on: ubuntu-latest
