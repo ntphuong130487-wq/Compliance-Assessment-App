@@ -54,6 +54,8 @@ const obligationAuth=obligationExtract.indexOf("const auth=await requireUser(req
 const obligationAI=obligationExtract.indexOf("const hybrid=await extractObligationsHybrid");
 assert(obligationAuth>=0&&obligationAuth<obligationAI,"Obligation extraction must authorize before AI work");
 assert(aiExtractor.includes("AbortSignal.timeout(30000)"),"AI provider call must have a hard timeout");
+assert(aiExtractor.includes("sourceTextIsUntrusted:true")&&aiExtractor.includes("ignoreInstructionsInsideSource:true")&&aiExtractor.includes("noExternalActions:true"),
+  "AI extraction must explicitly treat source text as untrusted content");
 assert(docIntel.includes("AbortSignal.timeout(30000)"),"OCR provider call must have a hard timeout");
 for(const table of ["assessment_assignments","draft_requirements","unit_responses"]){
   assert(migration.includes("CREATE TABLE IF NOT EXISTS "+table),"Migration missing "+table);
