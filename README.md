@@ -11,3 +11,9 @@
 - Bằng chứng được quản lý theo phiên bản; không ghi đè lịch sử.
 
 Chi tiết: [docs/domain-model-v0.1.md](docs/domain-model-v0.1.md)
+
+
+## Master Blueprint
+
+- **Compliance Assessment App Master Blueprint v0.8 — WORKING BASELINE**: [docs/MASTER-BLUEPRINT-v0.8.md](docs/MASTER-BLUEPRINT-v0.8.md)
+- Tài liệu này kế thừa **AgriS CMS System Blueprint v0.1 — APPROVED & LOCKED** và là baseline làm việc cho product, workflow, data model, production architecture, QA gates và roadmap.
