@@ -50,12 +50,24 @@ async function assessmentGate(sql,assessmentId){
     JOIN requirement_assessments r ON r.id=f.requirement_assessment_id
     WHERE r.assessment_id=${assessmentId}::uuid
   `;
+  const assignments=await sql`
+    SELECT count(*)::int AS unassigned
+    FROM requirement_assessments r
+    WHERE r.assessment_id=${assessmentId}::uuid
+      AND NOT EXISTS (
+        SELECT 1 FROM requirement_assessment_assignments x
+        WHERE x.requirement_assessment_id=r.id
+          AND x.assignment_role='primary_assessor'
+          AND x.status='active'
+      )
+  `;
   return {
     total:Number(ra[0]?.total||0),
     done:Number(ra[0]?.done||0),
     pendingFindings:Number(findings[0]?.pending||0),
     finalFindings:Number(findings[0]?.final_count||0),
-    mandatoryFindingsWithoutAction:Number(findings[0]?.mandatory_without_action||0)
+    mandatoryFindingsWithoutAction:Number(findings[0]?.mandatory_without_action||0),
+    unassignedRequirements:Number(assignments[0]?.unassigned||0)
   };
 }
 
@@ -122,6 +134,39 @@ async function recordDraftDecision(sql,user,row,decisionType,fromState,toState,r
          ${fromState||null},${toState||null},${reason||null},${user.id},now(),'audit-metadata-pending-migration')
     `;
   }
+}
+
+async function requirementAssignmentContext(sql,raId){
+  const rows=await sql`
+    SELECT r.id::text,r.assessment_id::text AS "assessmentId",a.status AS "assessmentStatus",
+           s.org_unit_id::text AS "orgId"
+    FROM requirement_assessments r
+    JOIN compliance_assessments a ON a.id=r.assessment_id
+    LEFT JOIN LATERAL (
+      SELECT org_unit_id FROM assessment_scopes s0 WHERE s0.assessment_id=a.id ORDER BY s0.id LIMIT 1
+    ) s ON true
+    WHERE r.id=${raId}::uuid
+  `;
+  return rows[0]||null;
+}
+
+async function userAssignedToRequirement(sql,raId,userId){
+  const rows=await sql`
+    SELECT 1 FROM requirement_assessment_assignments
+    WHERE requirement_assessment_id=${raId}::uuid
+      AND user_id=${userId}
+      AND status='active'
+    LIMIT 1
+  `;
+  return rows.length>0;
+}
+
+async function assertRequirementWorkAccess(sql,user,raId){
+  if(hasPermission(user,"assign_assessment_work"))return true;
+  if(await userAssignedToRequirement(sql,raId,user.id))return true;
+  const e=new Error("REQUIREMENT_NOT_ASSIGNED_TO_USER");
+  e.status=403;e.code="REQUIREMENT_NOT_ASSIGNED_TO_USER";
+  throw e;
 }
 
 async function actionContext(sql,actionId){
@@ -267,6 +312,71 @@ export default async function handler(req,res){
       return res.status(201).json({ok:true,record:{id:assessmentId,status:"draft",requirementCount:eligible.length}});
     }
 
+    if(command==="assessment.assignRequirements"){
+      assertPermission(user,"assign_assessment_work");
+      const ctx=await assessmentContext(sql,p.assessmentId);
+      if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      if(!["draft","fieldwork"].includes(ctx.status)){
+        return res.status(409).json({ok:false,error:"ASSESSMENT_ASSIGNMENT_LOCKED"});
+      }
+      const items=Array.isArray(p.assignments)?p.assignments:[];
+      if(!items.length)return res.status(400).json({ok:false,error:"NO_ASSIGNMENTS"});
+      const raIds=[...new Set(items.map(x=>String(x.raId||"")).filter(Boolean))];
+      const validRa=await sql`
+        SELECT id::text FROM requirement_assessments
+        WHERE assessment_id=${p.assessmentId}::uuid AND id::text = ANY(${raIds})
+      `;
+      if(validRa.length!==raIds.length)return res.status(409).json({ok:false,error:"ASSIGNMENT_REQUIREMENT_SCOPE_MISMATCH"});
+      const userIds=[...new Set(items.map(x=>String(x.userId||"")).filter(Boolean))];
+      const users=userIds.length?await sql`
+        SELECT id,display_name AS name,email,role_code AS role,status,public_metadata AS "publicMetadata"
+        FROM app_users WHERE id = ANY(${userIds}) AND status='active'
+      `:[];
+      if(users.length!==userIds.length)return res.status(409).json({ok:false,error:"ASSIGNEE_NOT_ACTIVE"});
+      const byId=new Map(users.map(x=>[String(x.id),x]));
+      for(const item of items){
+        const assignee=byId.get(String(item.userId||""));
+        if(!assignee||!hasPermission({role:assignee.role},"conduct_fieldwork")){
+          return res.status(409).json({ok:false,error:"ASSIGNEE_CANNOT_CONDUCT_FIELDWORK"});
+        }
+        const orgs=Array.isArray(assignee.publicMetadata?.orgIds)?assignee.publicMetadata.orgIds.map(String):[];
+        if(!orgs.includes("*")&&!orgs.includes(String(ctx.orgId))){
+          return res.status(409).json({ok:false,error:"ASSIGNEE_OUTSIDE_ORG_SCOPE"});
+        }
+      }
+      const statements=[];
+      for(const item of items){
+        const assignee=byId.get(String(item.userId));
+        statements.push(sql`
+          UPDATE requirement_assessment_assignments
+          SET status='inactive'
+          WHERE requirement_assessment_id=${item.raId}::uuid
+            AND assignment_role='primary_assessor'
+            AND status='active'
+            AND user_id<>${item.userId}
+        `);
+        statements.push(sql`
+          INSERT INTO requirement_assessment_assignments
+            (id,requirement_assessment_id,user_id,display_name,assignment_role,assigned_by,assigned_at,status)
+          VALUES
+            (${crypto.randomUUID()}::uuid,${item.raId}::uuid,${item.userId},
+             ${assignee.name||assignee.email||item.userId},'primary_assessor',${user.id},now(),'active')
+          ON CONFLICT DO NOTHING
+        `);
+        statements.push(sql`
+          INSERT INTO decision_logs
+            (id,object_type,object_id,decision_type,from_state,to_state,decided_by,decided_at,metadata,source)
+          VALUES
+            (${crypto.randomUUID()}::uuid,'RequirementAssessment',${item.raId}::uuid,'assign_primary_assessor',
+             NULL,${item.userId},${user.id},now(),
+             ${JSON.stringify({assessmentId:p.assessmentId,assigneeName:assignee.name||assignee.email||item.userId})}::jsonb,'compliance-app')
+        `);
+      }
+      await sql.transaction(statements);
+      return res.status(200).json({ok:true,count:items.length});
+    }
+
     if(command==="assessment.startFieldwork"){
       assertPermission(user,"manage_assessment");
       const ctx=await assessmentContext(sql,p.assessmentId);
@@ -275,6 +385,7 @@ export default async function handler(req,res){
       if(ctx.status!=="draft")return res.status(409).json({ok:false,error:"ASSESSMENT_NOT_DRAFT"});
       const gate=await assessmentGate(sql,p.assessmentId);
       if(gate.total<1)return res.status(409).json({ok:false,error:"ASSESSMENT_REQUIREMENTS_REQUIRED"});
+      if(gate.unassignedRequirements>0)return res.status(409).json({ok:false,error:"ASSESSMENT_ASSIGNMENTS_INCOMPLETE",gate});
       await sql.transaction([
         sql`
           UPDATE compliance_assessments
@@ -358,6 +469,7 @@ export default async function handler(req,res){
       if(!assessment)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
       assertOrgScope(user,assessment.orgId);
       if(assessment.status!=="fieldwork")return res.status(409).json({ok:false,error:"ASSESSMENT_FIELDWORK_NOT_ACTIVE"});
+      await assertRequirementWorkAccess(sql,user,p.id);
       const result=String(p.result||"not_assessed");
       const workflow=String(p.workflow||"in_review");
       if(!["not_assessed","compliant","partially_compliant","non_compliant","not_applicable","insufficient_evidence"].includes(result)){
@@ -386,6 +498,7 @@ export default async function handler(req,res){
       if(!assessment)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
       assertOrgScope(user,assessment.orgId);
       if(assessment.status!=="fieldwork")return res.status(409).json({ok:false,error:"ASSESSMENT_FIELDWORK_NOT_ACTIVE"});
+      await assertRequirementWorkAccess(sql,user,p.raId);
       const ra=await sql`
         SELECT id::text FROM requirement_assessments
         WHERE id=${p.raId}::uuid AND assessment_id=${p.assessmentId}::uuid
