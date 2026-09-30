@@ -10,7 +10,9 @@ function seed(){
   var as="as_demo";return{meta:{demo:true,version:"0.1"},org:[{id:"ho",name:"HO"},{id:"agric",name:"AgriC"}],frameworks:[{id:fw,code:"FW-DEMO-01",name:"Khung tuân thủ minh họa",version:"0.1",status:"draft",reqIds:req.map(function(r){return r.id})}],requirements:req,assessments:[{id:as,name:"Đánh giá minh họa – AgriC",frameworkId:fw,orgId:"agric",objective:"Kiểm thử end-to-end.",status:"fieldwork",locked:false}],ra:req.map(function(r,i){return{id:"ra"+i,assessmentId:as,requirementId:r.id,workflow:i===0?"in_progress":"to_do",result:"not_assessed",evidenceIds:[]}}),evidence:[],revisions:[],links:[],proposals:[],findings:[],actions:[],verifications:[],logs:[{id:id("log"),type:"seed_demo",object:"Assessment",at:now(),note:"Dữ liệu minh họa để kiểm thử ứng dụng."}]}
 }
 function normalizeState(s){
-  s=s||seed();s.responses=s.responses||[];s.sources=s.sources||[];s.draftRequirements=s.draftRequirements||[];
+  s=s||seed();
+  if(s.meta&&s.meta.demo&&s.meta.version!=="0.8-demo"&&window.AgriSComplianceDemoState)s=seed();
+  s.responses=s.responses||[];s.sources=s.sources||[];s.draftRequirements=s.draftRequirements||[];
   (s.requirements||[]).forEach(function(r){if(!r.status)r.status="effective"});
   (s.assessments||[]).forEach(function(a){a.processRef=a.processRef||"";a.activityRef=a.activityRef||"";a.locationRef=a.locationRef||"";a.periodFrom=a.periodFrom||"";a.periodTo=a.periodTo||""});
   (s.findings||[]).forEach(function(f){if(f.status==="confirmed")f.status="final"});
