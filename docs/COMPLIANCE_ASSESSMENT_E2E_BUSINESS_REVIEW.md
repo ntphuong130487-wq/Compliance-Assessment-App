@@ -21,7 +21,7 @@ Nguyên tắc:
 | Nguồn tuân thủ | Compliance framework owner | draft → extracted → pending approval → published/effective | Nguồn, metadata, version, hiệu lực; auth trước OCR/AI | Có |
 | Nghĩa vụ dự thảo | Compliance reviewer | draft → accepted/rejected → published | Human review bắt buộc; AI metadata/audit | Có |
 | Yêu cầu tuân thủ | Framework approver | pending approval → effective/rejected | Một cấp duyệt; chỉ effective được đánh giá | Có |
-| Chương trình đánh giá | Compliance manager/Lead assessor | draft / fieldwork / review / closed | Owner, reviewer, kỳ, phạm vi, requirement set | Có nền; lifecycle assessment cần hoàn thiện tiếp |
+| Chương trình đánh giá | Compliance manager/Lead assessor/Reviewer | draft → fieldwork → review → closed | Bắt đầu fieldwork khóa phạm vi; chỉ gửi review khi các điểm kiểm tra hoàn tất và không còn Finding chờ xử lý; reviewer/manager đóng | Đã triển khai |
 | Phạm vi | Assessment owner | active theo assessment | Đơn vị + quy trình + hoạt động + địa điểm; org scope | Có |
 | Điểm kiểm tra | Assessor | to_do → in_review → done | Result taxonomy được kiểm soát backend | Đã siết |
 | Bằng chứng | Assessor/Action owner | active + revision | Auth, org scope, private storage, immutable history | Có và đã harden |
@@ -52,11 +52,16 @@ Cần tiếp tục:
 - Lead assessor, reviewer, unit representative.
 - Tự xác định requirement theo phạm vi.
 
-Gap:
-- Chưa có workflow chuyển trạng thái assessment ở backend.
-- Chưa có freeze/lock scope sau khi bắt đầu fieldwork.
-- Chưa có RACI/assignment theo từng assessor hoặc requirement.
-- Chưa có close gate của assessment.
+Đã triển khai:
+- Backend lifecycle: Draft → Fieldwork → Review → Closed.
+- Bắt đầu Fieldwork ghi `locked_at` và khóa phạm vi/requirement set theo baseline.
+- Submit for Review chỉ khi toàn bộ Requirement Assessment đã hoàn tất và không còn Finding ở trạng thái chờ xử lý.
+- Close Gate chỉ thực hiện từ Review bởi vai trò có quyền review; việc đóng Assessment không bắt buộc các remediation action đã đóng.
+- Mọi chuyển trạng thái được ghi vào `decision_logs`.
+
+Gap còn lại:
+- Chưa có assignment chi tiết theo từng assessor/requirement.
+- Chưa có workflow mở lại Assessment sau khi đã đóng (nếu phát sinh ngoại lệ).
 
 ### 3.3 Fieldwork & Evidence
 Đã có:
@@ -138,12 +143,11 @@ Gap ưu tiên:
 4. Production readiness + Neon clone migration + Blob smoke test.
 
 ### P1 — ngay sau production baseline
-1. Assessment lifecycle: draft → fieldwork → review → closed.
-2. Scope freeze sau khi bắt đầu.
-3. Assessment close gate.
-4. Tách Recommendation và Mandatory Remediation.
-5. Action progress / due-date change audit.
-6. Reviewer sign-off.
+1. Tách Recommendation và Mandatory Remediation.
+2. Action progress / due-date change audit.
+3. Assignment chi tiết theo assessor/requirement.
+4. Workflow reopen Assessment có kiểm soát.
+5. Reviewer sign-off nâng cao ở cấp requirement nếu cần.
 
 ### P2 — quản trị nâng cao
 1. Repeat finding analytics.
