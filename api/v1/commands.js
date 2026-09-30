@@ -47,13 +47,24 @@ async function recordDraftDecision(sql,user,row,decisionType,fromState,toState,r
     uncertainties:Array.isArray(row.uncertainties)?row.uncertainties:[],
     ...extra
   };
-  await sql`
-    INSERT INTO decision_logs
-      (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
-    VALUES
-      (${crypto.randomUUID()}::uuid,'DraftRequirement',${row.id}::uuid,${decisionType},
-       ${fromState||null},${toState||null},${reason||null},${user.id},now(),${JSON.stringify(metadata)}::jsonb,'compliance-app')
-  `;
+  try{
+    await sql`
+      INSERT INTO decision_logs
+        (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
+      VALUES
+        (${crypto.randomUUID()}::uuid,'DraftRequirement',${row.id}::uuid,${decisionType},
+         ${fromState||null},${toState||null},${reason||null},${user.id},now(),${JSON.stringify(metadata)}::jsonb,'compliance-app')
+    `;
+  }catch(error){
+    if(error?.code!=="42703")throw error;
+    await sql`
+      INSERT INTO decision_logs
+        (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,approval_ref)
+      VALUES
+        (${crypto.randomUUID()}::uuid,'DraftRequirement',${row.id}::uuid,${decisionType},
+         ${fromState||null},${toState||null},${reason||null},${user.id},now(),'audit-metadata-pending-migration')
+    `;
+  }
 }
 
 async function actionContext(sql,actionId){
