@@ -266,6 +266,14 @@ CREATE TABLE IF NOT EXISTS draft_requirements (
   expected_evidence text,
   test_procedure text,
   review_status text NOT NULL DEFAULT 'draft',
+  ai_generated boolean NOT NULL DEFAULT false,
+  ai_confidence numeric(5,4),
+  ai_engine text,
+  ai_schema_version text,
+  ai_field_confidence jsonb,
+  ai_review_reasons jsonb,
+  ai_uncertainties jsonb,
+  ai_payload jsonb,
   reviewed_by text,
   reviewed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -303,3 +311,22 @@ CREATE INDEX IF NOT EXISTS idx_draft_requirements_source_status ON draft_require
 CREATE INDEX IF NOT EXISTS idx_unit_responses_finding ON unit_responses(finding_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_org ON evidence(org_unit_id);
 
+
+
+-- AI Obligation Intelligence v1
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='chk_draft_requirements_ai_confidence'
+  ) THEN
+    ALTER TABLE draft_requirements
+      ADD CONSTRAINT chk_draft_requirements_ai_confidence
+      CHECK (ai_confidence IS NULL OR (ai_confidence >= 0 AND ai_confidence <= 1));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_draft_requirements_ai_confidence
+  ON draft_requirements(ai_confidence)
+  WHERE ai_generated=true;
+CREATE INDEX IF NOT EXISTS idx_draft_requirements_ai_review
+  ON draft_requirements(review_status, ai_generated, ai_confidence);
