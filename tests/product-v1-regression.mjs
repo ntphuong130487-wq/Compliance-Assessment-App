@@ -59,6 +59,8 @@ assert(screens.includes("aging-strip"),"Action aging missing");
 assert(screens.includes("Human review bắt buộc"),"Human review UX missing");
 assert(screens.includes("Dữ liệu kiểm tra")&&screens.includes("không bóc nghĩa vụ"),"Source-role separation UX missing");
 assert(commands.includes("DRAFT_REVIEW_INCOMPLETE"),"Structured review completeness control missing");
+assert(commands.includes("DUPLICATE_DRAFT_OBLIGATION")&&commands.includes("DUPLICATE_OFFICIAL_REQUIREMENT"),"Obligation duplicate controls missing");
+assert(commands.includes("await sql.transaction(statements)"),"Obligation publish must be atomic");
 
 // End-to-end business lifecycle controls
 for(const control of [
