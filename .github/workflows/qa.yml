@@ -186,6 +186,24 @@ jobs:
             IF NOT EXISTS (
               SELECT 1 FROM pg_indexes WHERE indexname='ux_ra_primary_assessor'
             ) THEN RAISE EXCEPTION 'primary assessor unique index missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.tables WHERE table_name='assessment_sources'
+            ) THEN RAISE EXCEPTION 'assessment_sources missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='draft_requirements' AND column_name='actor_text'
+            ) THEN RAISE EXCEPTION 'draft obligation v2 fields missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='compliance_requirements' AND column_name='applicable_process_refs'
+            ) THEN RAISE EXCEPTION 'requirement structured scope missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='requirement_assessments' AND column_name='eligibility_snapshot'
+            ) THEN RAISE EXCEPTION 'eligibility snapshot missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint WHERE conname='chk_assessment_source_role'
+            ) THEN RAISE EXCEPTION 'assessment source role constraint missing'; END IF;
           END $$;
           SQL
 
