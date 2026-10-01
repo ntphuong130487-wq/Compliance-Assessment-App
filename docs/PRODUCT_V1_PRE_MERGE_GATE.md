@@ -26,16 +26,21 @@ Target: `main`
 
 ## Gate C — Production baseline
 - [x] Main production deployment is READY/PROMOTED
+  - Re-deployed 2026-10-01 from `main` commit `dcdbcf8d1fb8492e8cd939c4109b7c7ecb66e36b`
+  - Deployment: `dpl_4WduUcKhfiv5B5sLGx8qKN2Dir5E`
+  - Production alias assigned: `compliance-assessment-app-ashen.vercel.app`
 - [x] `DATA_MODE=normalized`
 - [x] `AUTH_MODE=clerk`
 - [x] Clerk production keys configured
 - [x] Vercel Blob store connected
 - [ ] Production readiness endpoint checked after final merge candidate deployment
+  - Current blocker: production deployment is READY/PROMOTED, but the available Vercel MCP connection cannot fetch the project URL endpoint; endpoint smoke test remains explicitly open.
 - [ ] Private Blob upload/read smoke test with authenticated production user
 
 ## Gate D — Database
 - [x] Migration 005/006 dry-run against clean PostgreSQL baseline
 - [ ] Migration 005/006 dry-run on a Neon branch cloned from the actual production database
+  - Current blocker: Neon connection available to this session is not authorized/scoped to the production project; do not run against a guessed project ID.
 - [ ] Verify migrated columns/indexes/constraints on Neon clone
 - [ ] Apply migration to production only after Gate A–D pass
 
