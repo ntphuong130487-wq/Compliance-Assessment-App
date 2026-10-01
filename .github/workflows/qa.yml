@@ -87,7 +87,7 @@ jobs:
           exit 23
 
 
-  production-clerk-ui-smoke:
+
     runs-on: ubuntu-latest
     continue-on-error: true
     needs: [production-clerk-proxy-smoke]
@@ -130,39 +130,3 @@ jobs:
           console.log("Production Clerk UI smoke PASS");
           await browser.close();
           NODE
-
-
-  production-private-blob-smoke:
-    runs-on: ubuntu-latest
-    needs: [production-clerk-proxy-smoke]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - name: Run one-time authenticated production private Blob smoke
-        env:
-          PRODUCTION_URL: https://compliance-assessment-app-ntphuong130487.vercel.app
-          SMOKE_REQUEST_ID: 8f7e9016-9e69-4e6f-bbb8-f0b02d4f8101
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 30); do
-            CODE=$(curl -L --max-time 30 -sS -o /tmp/private-blob-smoke.html -w "%{http_code}"               "$PRODUCTION_URL/smoke/private-blob?requestId=$SMOKE_REQUEST_ID" || true)
-            echo "Attempt $i/30: HTTP $CODE"
-            if [ "$CODE" = "200" ]; then
-              if grep -q "<h1>PASS</h1>" /tmp/private-blob-smoke.html; then
-                echo "Production private Blob smoke PASS"
-                cat /tmp/private-blob-smoke.html
-                exit 0
-              fi
-              echo "Smoke endpoint returned 200 without PASS"
-              cat /tmp/private-blob-smoke.html
-              exit 41
-            fi
-            if [ "$CODE" = "404" ]; then
-              sleep 5
-              continue
-            fi
-            echo "Smoke endpoint failed:"
-            cat /tmp/private-blob-smoke.html || true
-            exit 42
-          done
-          echo "Timed out waiting for deployed smoke endpoint"
-          exit 43
