@@ -165,8 +165,8 @@ async function initClerk(){
     clerkLoadError=null;
     clerkConfig=await fetch("/api/auth/config",{headers:{"Accept":"application/json"}}).then(function(r){return r.json()});
     if(!clerkConfig.configured||!clerkConfig.publishableKey)return null;
-    var token=String(clerkConfig.publishableKey).split("_")[2],domain=atob(token).slice(0,-1);
-    await loadExternalScript("https://"+domain+"/npm/@clerk/ui@1/dist/ui.browser.js","clerk-ui");
+    var proxyUrl=location.origin+"/__clerk";
+    await loadExternalScript(proxyUrl+"/npm/@clerk/ui@1/dist/ui.browser.js","clerk-ui");
     if(!document.getElementById("clerk-js")){
       await new Promise(function(resolve,reject){
         var s=document.createElement("script");
@@ -174,14 +174,15 @@ async function initClerk(){
         s.defer=true;
         s.crossOrigin="anonymous";
         s.setAttribute("data-clerk-publishable-key",clerkConfig.publishableKey);
-        s.src="https://"+domain+"/npm/@clerk/clerk-js@6/dist/clerk.browser.js";
+        s.setAttribute("data-clerk-proxy-url",proxyUrl);
+        s.src=proxyUrl+"/npm/@clerk/clerk-js@6/dist/clerk.browser.js";
         s.onload=resolve;
         s.onerror=function(){reject(new Error("CLERK_JS_LOAD_FAILED"))};
         document.head.appendChild(s);
       });
     }
     if(!window.Clerk)throw new Error("CLERK_GLOBAL_MISSING");
-    await window.Clerk.load({ui:{ClerkUI:window.__internal_ClerkUICtor}});
+    await window.Clerk.load({proxyUrl:proxyUrl,ui:{ClerkUI:window.__internal_ClerkUICtor}});
     clerkInstance=window.Clerk;
     if(!clerkListenerBound&&clerkInstance.addListener){
       clerkListenerBound=true;
