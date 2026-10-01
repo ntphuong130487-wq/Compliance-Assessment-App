@@ -16,7 +16,7 @@ var as="as_demo";return{meta:{demo:true,version:"0.1"},org:[{id:"ho",name:"HO"},
 function normalizeState(s){
 s=s||seed();
 if(s.meta&&s.meta.demo&&s.meta.version!=="0.8-demo"&&window.AgriSComplianceDemoState)s=seed();
-s.responses=s.responses||[];s.sources=s.sources||[];s.draftRequirements=s.draftRequirements||[];s.draftReviewEvents=s.draftReviewEvents||[];
+s.responses=s.responses||[];s.sources=s.sources||[];s.assessmentSources=s.assessmentSources||[];s.draftRequirements=s.draftRequirements||[];s.draftReviewEvents=s.draftReviewEvents||[];
 (s.requirements||[]).forEach(function(r){if(!r.status)r.status="effective"});
 (s.assessments||[]).forEach(function(a){a.processRef=a.processRef||"";a.activityRef=a.activityRef||"";a.locationRef=a.locationRef||"";a.periodFrom=a.periodFrom||"";a.periodTo=a.periodTo||""});
 (s.findings||[]).forEach(function(f){if(f.status==="confirmed")f.status="final";if(f.remediationRequired==null)f.remediationRequired=false;f.remediationRequirement=f.remediationRequirement||""});
@@ -289,6 +289,12 @@ try{
 if(!drafts.length)drafts=localExtract(text,src.id);
 S.draftRequirements=S.draftRequirements.concat(drafts);
 src.status="extracted";src.extractedCount=drafts.length;src.updatedAt=now();save();render();
+}
+function sourceRoleLabel(v){return({basis_external:"Căn cứ bên ngoài",basis_internal:"Căn cứ nội bộ",context:"Nguồn bối cảnh",test_data:"Dữ liệu kiểm tra",evidence:"Bằng chứng"})[v]||v||"—"}
+function sourceRoleExtractable(v){return v==="basis_external"||v==="basis_internal"}
+function assessmentSourceContextFields(){
+if(!S.assessments.length)return '<div class="search-warning">Cần tạo cuộc đánh giá và xác định phạm vi trước khi tiếp nhận nguồn.</div>';
+return '<div class="field"><label>Cuộc đánh giá / phạm vi sử dụng nguồn</label><select name="assessmentId" required>'+S.assessments.map(function(a){var u=S.org.find(function(x){return x.id===a.orgId});return '<option value="'+a.id+'">'+esc(a.name)+(u?' · '+esc(u.name):'')+'</option>'}).join("")+'</select></div><div class="field"><label>Vai trò của nguồn</label><select name="sourceRole" required><option value="basis_external">Căn cứ bên ngoài — luật/quy định/tiêu chuẩn/cam kết</option><option value="basis_internal">Căn cứ nội bộ — quy chế/chính sách/quy trình</option><option value="context">Nguồn bối cảnh — ví dụ JD/mô tả vai trò</option><option value="test_data">Dữ liệu kiểm tra — dữ liệu vận hành, danh sách giao dịch...</option><option value="evidence">Bằng chứng — chứng từ/hình ảnh/log dùng để kiểm tra</option></select></div><div class="split"><label class="field"><span>Xác nhận liên quan tới phạm vi</span><span><input type="checkbox" name="relevanceVerified" value="1"> Đã kiểm tra liên quan</span></label><label class="field"><span>Xác nhận hiệu lực/phiên bản</span><span><input type="checkbox" name="effectivenessVerified" value="1"> Đã kiểm tra hiệu lực</span></label></div><div class="field"><label>Ghi chú đánh giá nguồn</label><input name="relevanceNote" placeholder="Căn cứ lựa chọn nguồn, phạm vi áp dụng hoặc lưu ý phiên bản"></div>';
 }
 function sourceMetaFields(s){
 s=s||{};
