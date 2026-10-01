@@ -205,14 +205,15 @@ jobs:
           fi
 
           echo "1) Verify protected preview readiness using Vercel automation bypass"
-          PREVIEW_CODE=$(curl -L -sS \
-            -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
-            -H "x-vercel-set-bypass-cookie: true" \
+          PREVIEW_CODE=$(curl -sS \
             -o /tmp/preview-readiness.json \
+            -D /tmp/preview-headers.txt \
             -w "%{http_code}" \
-            "$PREVIEW_URL/api/system?route=readiness" || true)
+            "$PREVIEW_URL/api/system?route=readiness&x-vercel-protection-bypass=$VERCEL_AUTOMATION_BYPASS_SECRET&x-vercel-set-bypass-cookie=true" || true)
           echo "Preview HTTP: $PREVIEW_CODE"
           if [ "$PREVIEW_CODE" != "200" ]; then
+            echo "Preview response headers:"
+            sed -E 's/(x-vercel-protection-bypass|set-cookie):.*/\1: [redacted]/I' /tmp/preview-headers.txt || true
             cat /tmp/preview-readiness.json || true
             exit 11
           fi
