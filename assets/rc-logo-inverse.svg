@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-labelledby="title desc">
+  <title id="title">R&amp;C — Risk &amp; Compliance</title>
+  <desc id="desc">Logo R&amp;C đảo màu dùng trên nền xanh đậm: chữ R và C màu trắng, ký hiệu ampersand màu xanh lá, tagline Risk &amp; Compliance màu trắng.</desc>
+  <g fill="none">
+    <text x="18" y="154" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="154" font-weight="800" letter-spacing="-12">R</text>
+    <text x="335" y="154" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="154" font-weight="800" letter-spacing="-12">C</text>
+    <text x="205" y="153" fill="#79b82a" font-family="Arial, Helvetica, sans-serif" font-size="158" font-weight="800" letter-spacing="-10">&amp;</text>
+    <text x="28" y="205" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" letter-spacing="11">RISK &amp; COMPLIANCE</text>
+  </g>
+</svg>
