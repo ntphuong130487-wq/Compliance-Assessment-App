@@ -191,37 +191,48 @@ jobs:
     needs: [qa, migration-dry-run]
     if: github.ref == 'refs/heads/feature/product-v1-ui-ai' || github.event_name == 'pull_request'
     steps:
-      - name: Check Vercel preview protection and production readiness
+      - name: Check protected Vercel preview and production readiness
         env:
           PREVIEW_URL: https://compliance-assessment-app-git-feature-pro-654f8b-ntphuong130487.vercel.app
           PRODUCTION_URL: https://compliance-assessment-app-ashen.vercel.app
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           set -euo pipefail
 
-          echo "1) Verify latest branch preview is reachable at Vercel edge"
-          PREVIEW_CODE=$(curl -L -sS -o /tmp/preview.html -w "%{http_code}" "$PREVIEW_URL/api/system?route=readiness" || true)
-          echo "Preview HTTP: $PREVIEW_CODE"
-          if grep -qiE 'Continue with Email|Vercel|sso-api' /tmp/preview.html; then
-            echo "Preview is behind Vercel Deployment Protection; direct unauthenticated readiness cannot be used."
-          elif [ "$PREVIEW_CODE" = "200" ]; then
-            node -e '
-              const fs=require("fs");
-              const x=JSON.parse(fs.readFileSync("/tmp/preview.html","utf8"));
-              if(!x.ok) throw new Error("preview readiness ok=false");
-              console.log("Preview readiness endpoint reachable");
-            '
-          else
-            echo "Preview edge check failed: HTTP $PREVIEW_CODE"
-            cat /tmp/preview.html || true
-            exit 2
+          if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo "VERCEL_AUTOMATION_BYPASS_SECRET is not configured in GitHub Actions Secrets."
+            exit 10
           fi
+
+          echo "1) Verify protected preview readiness using Vercel automation bypass"
+          PREVIEW_CODE=$(curl -L -sS \
+            -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+            -H "x-vercel-set-bypass-cookie: true" \
+            -o /tmp/preview-readiness.json \
+            -w "%{http_code}" \
+            "$PREVIEW_URL/api/system?route=readiness" || true)
+          echo "Preview HTTP: $PREVIEW_CODE"
+          if [ "$PREVIEW_CODE" != "200" ]; then
+            cat /tmp/preview-readiness.json || true
+            exit 11
+          fi
+
+          cat /tmp/preview-readiness.json
+          node -e '
+            const fs=require("fs");
+            const raw=fs.readFileSync("/tmp/preview-readiness.json","utf8");
+            if(raw.trim().startsWith("<")) throw new Error("preview still returned protection/login HTML");
+            const x=JSON.parse(raw);
+            if(!x.ok) throw new Error("preview readiness ok=false");
+            console.log("Protected preview bypass PASS");
+          '
 
           echo "2) Verify current production environment readiness"
           PROD_CODE=$(curl -L -sS -o /tmp/production-readiness.json -w "%{http_code}" "$PRODUCTION_URL/api/system?route=readiness" || true)
           echo "Production HTTP: $PROD_CODE"
           if [ "$PROD_CODE" != "200" ]; then
             cat /tmp/production-readiness.json || true
-            exit 3
+            exit 12
           fi
 
           cat /tmp/production-readiness.json
@@ -233,7 +244,7 @@ jobs:
             if(!x.ok) throw new Error("production readiness ok=false");
             if(!x.productionReady) {
               console.error(JSON.stringify({productionReady:x.productionReady,missing:x.missing,database:x.database,storage:x.storage,auth:x.auth},null,2));
-              process.exit(4);
+              process.exit(13);
             }
             console.log("Production environment readiness PASS");
           '
