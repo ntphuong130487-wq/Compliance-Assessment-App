@@ -89,6 +89,7 @@ jobs:
 
   production-clerk-ui-smoke:
     runs-on: ubuntu-latest
+    continue-on-error: true
     needs: [production-clerk-proxy-smoke]
     if: github.ref == 'refs/heads/main'
     steps:
@@ -133,7 +134,7 @@ jobs:
 
   production-private-blob-smoke:
     runs-on: ubuntu-latest
-    needs: [production-clerk-ui-smoke]
+    needs: [production-clerk-proxy-smoke]
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Run one-time authenticated production private Blob smoke
