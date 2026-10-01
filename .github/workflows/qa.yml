@@ -57,6 +57,7 @@ jobs:
           node --check api/system.js
           node --check api/auth.js
           node --check api/users.js
+          node --check api/clerk-proxy.js
           node --check lib/system-routes.js
           node --check lib/auth-routes.js
           node --check lib/user-routes.js
@@ -194,7 +195,7 @@ jobs:
       - name: Check protected Vercel preview and production readiness
         env:
           PREVIEW_URL: https://compliance-assessment-app-git-feature-pro-654f8b-ntphuong130487.vercel.app
-          PRODUCTION_URL: https://compliance-assessment-app-ashen.vercel.app
+          PRODUCTION_URL: https://compliance-assessment-app-ntphuong130487.vercel.app
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           set -euo pipefail
@@ -268,21 +269,9 @@ jobs:
             console.log("Production environment readiness PASS");
           '
 
-          echo "3) Verify Clerk frontend CDN assets from production publishable key"
-          curl -sS "$PRODUCTION_URL/api/auth/config" -o /tmp/clerk-config.json
-          node - <<'NODE'
-          const fs=require("fs");
-          const {execFileSync}=require("child_process");
-          const cfg=JSON.parse(fs.readFileSync("/tmp/clerk-config.json","utf8"));
-          if(!cfg.configured||!cfg.publishableKey) throw new Error("Clerk config/publishable key missing");
-          const domain=Buffer.from(String(cfg.publishableKey).split("_")[2],"base64").toString("utf8").slice(0,-1);
-          for(const [name,path] of [
-            ["ui","/npm/@clerk/ui@1/dist/ui.browser.js"],
-            ["clerk-js","/npm/@clerk/clerk-js@6/dist/clerk.browser.js"]
-          ]){
-            const url="https://"+domain+path;
-            const code=execFileSync("curl",["-sS","-o","/dev/null","-w","%{http_code}",url],{encoding:"utf8"}).trim();
-            console.log(name+" CDN HTTP "+code+" via "+domain);
-            if(code!=="200") process.exitCode=14;
-          }
-          NODE
+          echo "3) Verify Clerk same-origin proxy assets"
+          for PATHNAME in "/__clerk/npm/@clerk/ui@1/dist/ui.browser.js" "/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js"; do
+            CODE=$(curl -L --max-redirs 5 --max-time 15 -sS -o /tmp/clerk-asset.bin -w "%{http_code}" "$PRODUCTION_URL$PATHNAME" || true)
+            echo "$PATHNAME HTTP $CODE"
+            if [ "$CODE" != "200" ]; then exit 14; fi
+          done

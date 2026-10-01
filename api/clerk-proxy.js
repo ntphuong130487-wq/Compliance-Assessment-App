@@ -19,7 +19,6 @@ export default async function handler(req,res){
   if(!process.env.CLERK_SECRET_KEY){
     return res.status(503).json({ok:false,error:"CLERK_SECRET_KEY_NOT_CONFIGURED"});
   }
-
   const rawPath=String(req.query?.path||"").replace(/^\/+/, "");
   const rawSearch=String(req.url||"").split("?")[1]||"";
   const params=new URLSearchParams(rawSearch);
