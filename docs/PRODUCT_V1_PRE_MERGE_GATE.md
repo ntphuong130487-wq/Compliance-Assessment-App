@@ -1,71 +1,68 @@
-# Product v1 — Pre-Merge Release Gate
+# Product v1 — Release Gate
 
-Branch: `feature/product-v1-ui-ai`  
-Target: `main`
+Status: **RELEASED TO MAIN — 2026-10-01**  
+Merged PR: **#2**  
+Release commit: `f7d5609ac22ced5e878f57ca1e3532a23931bbc3`
 
 ## Gate A — Code & regression
-- [x] Latest merge-candidate built successfully on Vercel staging
-  - Commit: `fb4ead221c5f968276d213a036f9dbc7cec100cc`
-  - Deployment: `dpl_4AdD8vRpGu4owqg4kuUKXv4qPkCm` — READY/STAGED
-  - Vercel runtime: Node 24.x, 11 serverless functions
 - [x] Static QA
 - [x] RBAC / org-scope regression
 - [x] Product workflow regression
 - [x] Browser regression across 8 screens
 - [x] PDF/DOCX/scan OCR routing regression
 - [x] Evidence authorization + atomicity regression
-- [x] Migration 005–009 dry-run on PostgreSQL baseline
+- [x] Migration 005–009 dry-run
 - [x] Migration 005–009 idempotence verification
+- [x] Final merged-head QA workflow PASS
+- [x] Vercel release deployment SUCCESS
 
 ## Gate B — Security controls
 - [x] Evidence read requires authenticated, provisioned user
-- [x] Evidence read enforces org scope before private Blob read
-- [x] Evidence upload authorizes target/org before body read and Blob write
-- [x] Evidence DB records are written transactionally
-- [x] Blob cleanup executes if DB persistence fails
+- [x] Evidence read enforces org scope
+- [x] Evidence upload authorizes target/org before Blob persistence
+- [x] Evidence DB persistence controls regression PASS
+- [x] Private Blob write/read/hash control smoke PASS
+- [x] Direct unauthenticated Blob access denied in smoke
+- [x] Evidence / revision / link persistence verification PASS
+- [x] Audit decision-log verification PASS
+- [x] Smoke fixture and Blob cleanup PASS
 - [x] Action Owner cannot self-verify
 - [x] Closure evidence required before verification
 - [x] AI output remains draft/proposal; human review required
 - [x] Human review decisions are audit logged
 
-## Gate C — Production baseline
-- [x] Main production deployment is READY/PROMOTED
-  - Re-deployed 2026-10-01 from `main` commit `dcdbcf8d1fb8492e8cd939c4109b7c7ecb66e36b`
-  - Deployment: `dpl_4WduUcKhfiv5B5sLGx8qKN2Dir5E`
-  - Production alias assigned: `compliance-assessment-app-ashen.vercel.app`
-- [x] `DATA_MODE=normalized`
-- [x] `AUTH_MODE=clerk`
+## Gate C — Production authentication & runtime
 - [x] Clerk production keys configured
-- [x] Vercel Blob store connected
-- [x] Production environment readiness endpoint checked via Vercel runtime smoke
-  - Production alias: `compliance-assessment-app-ashen.vercel.app`
-  - HTTP 200; `productionReady=true`; `missing=[]`
-  - Clerk configured; normalized DB ready; production core ready; Vercel Blob configured via OIDC
-- [x] Latest feature branch deployed successfully to Vercel Preview and automation bypass verified
-  - Latest verified commit: `712417475e14a571af197d5384a15391713c0ecf`
-  - Vercel status: SUCCESS
-  - `VERCEL_AUTOMATION_BYPASS_SECRET` detected by GitHub Actions
-  - Protected preview handshake: 307 -> bypass cookie -> readiness HTTP 200
-  - Preview readiness reached app runtime successfully
-- [ ] Private Blob upload/read smoke test with authenticated production user
-  - Preview environment note: Clerk keys are not configured on Preview, so authenticated smoke must run against Production or Preview must receive separate Clerk credentials.
+- [x] Clerk same-origin proxy configured at `/__clerk`
+- [x] Clerk primary production domain verified:
+  `compliance-assessment-app-ntphuong130487.vercel.app`
+- [x] Real production user login observed
+- [x] User provisioned as active `compliance_admin` with enterprise scope
+- [x] `DATA_MODE=normalized`
+- [x] Vercel Blob connected
+- [x] Final Vercel deployment status SUCCESS
 
-## Gate D — Database
-- [x] Production Neon project positively identified
-  - Project: `falling-river-32945726` — Compliance Assessment App Prod SG
-  - Region: `aws-ap-southeast-1`
-  - Production/default branch: `br-noisy-hill-b39cbexd` (`production`)
-- [x] Clone created from actual production branch
-  - Clone: `br-nameless-cell-b33aqvnr`
-  - Name: `dryrun-migration-005-009-20261001`
-- [x] Migration 005–009 dry-run completed successfully on production clone
-- [x] Migrated columns/indexes/check constraints verified on clone
-- [x] Migration 005–009 re-run successfully to verify idempotence
-- [x] Schema drift found and fixed in migration 007
-  - Existing `remediation_actions.action_type` column could bypass intended default/NOT NULL because `ADD COLUMN IF NOT EXISTS` does not repair existing column attributes.
-  - Fix committed on feature branch: `f4a035f37816a6271db99b2bb7b66e3db335bf12`.
-  - Verified on clone: `action_type text NOT NULL DEFAULT 'mandatory_remediation'`.
-- [ ] Apply migration 005–009 to production only after remaining Gate C smoke checks pass
+## Gate D — Neon production database
+- [x] Production project: `falling-river-32945726`
+- [x] Production branch: `br-noisy-hill-b39cbexd`
+- [x] Dry-run clone: `br-nameless-cell-b33aqvnr`
+- [x] Migration 005–009 verified on clone
+- [x] Migration 007 schema drift fixed
+- [x] Migration 005–009 applied to production
+- [x] Production verification:
+  - `remediation_actions.action_type` = `text NOT NULL DEFAULT 'mandatory_remediation'`
+  - `remediation_action_change_requests` exists
+  - `requirement_assessment_assignments` exists
+  - migration check constraints exist
+- [x] Post-smoke residue verification: zero smoke org/evidence/audit records
 
-## Merge rule
-Do not merge while any unchecked Gate C/D item remains. Use **Squash merge** after final verification.
+## Merge / release
+- [x] Main production hotfixes merged into feature branch
+- [x] Merge conflict resolved
+- [x] PR #2 marked ready
+- [x] PR #2 squash merged
+- [x] Main post-merge QA PASS
+- [x] Main post-merge Vercel deployment SUCCESS
+
+## Release conclusion
+Product v1 release gates covered code regression, database migration, authentication, evidence security, private Blob controls, org-scope enforcement, audit persistence and cleanup. Temporary smoke-test hooks were removed after verification.
