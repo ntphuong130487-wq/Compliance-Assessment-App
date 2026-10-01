@@ -206,11 +206,29 @@ jobs:
 
           echo "1) Verify protected preview readiness using Vercel automation bypass"
           PREVIEW_CODE=$(curl -sS \
-            -o /tmp/preview-readiness.json \
+            -c /tmp/vercel-bypass.cookies \
+            -o /tmp/preview-first-response.txt \
             -D /tmp/preview-headers.txt \
             -w "%{http_code}" \
             "$PREVIEW_URL/api/system?route=readiness&x-vercel-protection-bypass=$VERCEL_AUTOMATION_BYPASS_SECRET&x-vercel-set-bypass-cookie=true" || true)
-          echo "Preview HTTP: $PREVIEW_CODE"
+          echo "Preview bypass handshake HTTP: $PREVIEW_CODE"
+
+          if [ "$PREVIEW_CODE" = "307" ] || [ "$PREVIEW_CODE" = "302" ]; then
+            LOCATION=$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/\r$/,""); print $2}' /tmp/preview-headers.txt | tail -n1)
+            if [ -z "${LOCATION:-}" ]; then
+              echo "Bypass handshake redirected without Location header."
+              exit 11
+            fi
+            PREVIEW_CODE=$(curl -sS \
+              -b /tmp/vercel-bypass.cookies \
+              -o /tmp/preview-readiness.json \
+              -w "%{http_code}" \
+              "$PREVIEW_URL$LOCATION" || true)
+          else
+            cp /tmp/preview-first-response.txt /tmp/preview-readiness.json
+          fi
+
+          echo "Preview readiness HTTP: $PREVIEW_CODE"
           if [ "$PREVIEW_CODE" != "200" ]; then
             echo "Preview response headers:"
             sed -E 's/(x-vercel-protection-bypass|set-cookie):.*/\1: [redacted]/I' /tmp/preview-headers.txt || true
