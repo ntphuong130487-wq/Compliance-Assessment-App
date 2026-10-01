@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { sqlClient, normalizedMode, normalizedReady, publicError } from "../../lib/db.js";
 import { requireUser, assertPermission, assertOrgScope, hasPermission } from "../../lib/server-authz.js";
+import { assessmentEligibility, requirementSnapshot } from "../../lib/requirement-eligibility.js";
 
 function dateOnly(v){if(!v)return null;if(v instanceof Date)return v.toISOString().slice(0,10);const s=String(v);return /^\d{4}-\d{2}-\d{2}/.test(s)?s.slice(0,10):null;}
 
@@ -202,19 +203,44 @@ export default async function handler(req,res){
 
     if(command==="source.create"){
       assertPermission(user,"manage_framework");
-      const id=crypto.randomUUID();
-      const rows=await sql`
-        INSERT INTO compliance_sources
-          (id,source_type,code,title,version,effective_from,effective_to,owner,issuer,issue_date,status,
-           supersedes_ref,original_filename,mime_type,created_at,updated_at)
-        VALUES
-          (${id}::uuid,${p.sourceType||"Tệp đính kèm"},${p.sourceCode||null},${p.title},
-           ${p.version||null},${p.effectiveFrom||null}::date,${p.effectiveTo||null}::date,
-           ${p.owner||null},${p.issuer||null},${p.issueDate||null}::date,'draft',
-           ${p.supersedesRef||null},${p.fileName||null},${p.mimeType||null},now(),now())
-        RETURNING id::text,title,status
-      `;
-      return res.status(201).json({ok:true,record:rows[0]});
+      const assessmentId=String(p.assessmentId||"");
+      if(!assessmentId)return res.status(400).json({ok:false,error:"ASSESSMENT_CONTEXT_REQUIRED"});
+      const ctx=await assessmentContext(sql,assessmentId);
+      if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+
+      const role=String(p.sourceRole||"");
+      const allowedRoles=new Set(["basis_external","basis_internal","context","test_data","evidence"]);
+      if(!allowedRoles.has(role))return res.status(400).json({ok:false,error:"INVALID_SOURCE_ROLE"});
+      const extractionEligible=["basis_external","basis_internal"].includes(role);
+      const relevanceStatus=p.relevanceVerified===true?"verified":"pending";
+      const effectivenessStatus=p.effectivenessVerified===true?"verified":"pending";
+
+      const id=crypto.randomUUID(),linkId=crypto.randomUUID();
+      const rows=await sql.transaction([
+        sql`
+          INSERT INTO compliance_sources
+            (id,source_type,code,title,version,effective_from,effective_to,owner,issuer,issue_date,status,
+             supersedes_ref,original_filename,mime_type,created_at,updated_at)
+          VALUES
+            (${id}::uuid,${p.sourceType||"Tệp đính kèm"},${p.sourceCode||null},${p.title},
+             ${p.version||null},${p.effectiveFrom||null}::date,${p.effectiveTo||null}::date,
+             ${p.owner||null},${p.issuer||null},${p.issueDate||null}::date,'draft',
+             ${p.supersedesRef||null},${p.fileName||null},${p.mimeType||null},now(),now())
+          RETURNING id::text,title,status
+        `,
+        sql`
+          INSERT INTO assessment_sources
+            (id,assessment_id,source_id,source_role,extraction_eligible,relevance_status,effectiveness_status,
+             relevance_note,linked_by,linked_at,verified_by,verified_at)
+          VALUES
+            (${linkId}::uuid,${assessmentId}::uuid,${id}::uuid,${role},${extractionEligible},
+             ${relevanceStatus},${effectivenessStatus},${p.relevanceNote||null},${user.id},now(),
+             ${relevanceStatus==="verified"&&effectivenessStatus==="verified"?user.id:null},
+             ${relevanceStatus==="verified"&&effectivenessStatus==="verified"?"now()":null})
+        `
+      ]);
+      return res.status(201).json({ok:true,record:rows[0][0],link:{id:linkId,assessmentId,sourceRole:role,extractionEligible,relevanceStatus,effectivenessStatus}});
     }
 
     if(command==="source.update"){
@@ -234,6 +260,45 @@ export default async function handler(req,res){
       `;
       if(!rows.length)return res.status(404).json({ok:false,error:"SOURCE_NOT_FOUND"});
       return res.status(200).json({ok:true,record:rows[0]});
+    }
+
+    if(command==="source.verifyForAssessment"){
+      assertPermission(user,"manage_framework");
+      const assessmentId=String(p.assessmentId||""),sourceId=String(p.sourceId||"");
+      const ctx=await assessmentContext(sql,assessmentId);
+      if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      const relevanceStatus=p.relevant===false?"not_relevant":"verified";
+      const effectivenessStatus=p.effective===false?"outdated":"verified";
+      const rows=await sql`
+        UPDATE assessment_sources SET
+          relevance_status=${relevanceStatus},effectiveness_status=${effectivenessStatus},
+          relevance_note=${p.note||null},verified_by=${user.id},verified_at=now()
+        WHERE assessment_id=${assessmentId}::uuid AND source_id=${sourceId}::uuid
+        RETURNING id::text,source_role AS "sourceRole",extraction_eligible AS "extractionEligible",
+                  relevance_status AS "relevanceStatus",effectiveness_status AS "effectivenessStatus"
+      `;
+      if(!rows.length)return res.status(404).json({ok:false,error:"ASSESSMENT_SOURCE_LINK_NOT_FOUND"});
+      return res.status(200).json({ok:true,record:rows[0]});
+    }
+
+    if(command==="source.linkExisting"){
+      assertPermission(user,"manage_framework");
+      const assessmentId=String(p.assessmentId||""),sourceId=String(p.sourceId||""),role=String(p.sourceRole||"");
+      const ctx=await assessmentContext(sql,assessmentId);
+      if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      if(!["basis_external","basis_internal","context","test_data","evidence"].includes(role))return res.status(400).json({ok:false,error:"INVALID_SOURCE_ROLE"});
+      const extractionEligible=["basis_external","basis_internal"].includes(role);
+      const id=crypto.randomUUID();
+      await sql`
+        INSERT INTO assessment_sources(id,assessment_id,source_id,source_role,extraction_eligible,relevance_status,effectiveness_status,linked_by,linked_at)
+        VALUES(${id}::uuid,${assessmentId}::uuid,${sourceId}::uuid,${role},${extractionEligible},'pending','pending',${user.id},now())
+        ON CONFLICT(assessment_id,source_id) DO UPDATE SET
+          source_role=EXCLUDED.source_role,extraction_eligible=EXCLUDED.extraction_eligible,
+          relevance_status='pending',effectiveness_status='pending',linked_by=EXCLUDED.linked_by,linked_at=now(),verified_by=NULL,verified_at=NULL
+      `;
+      return res.status(201).json({ok:true,id,assessmentId,sourceId,sourceRole:role,extractionEligible});
     }
 
     if(command==="framework.createManual"){
@@ -271,27 +336,18 @@ export default async function handler(req,res){
       assertPermission(user,"manage_assessment");
       assertOrgScope(user,p.orgId);
       const assessmentId=crypto.randomUUID(),scopeId=crypto.randomUUID();
-      const reqIds=Array.isArray(p.requirementIds)?p.requirementIds.filter(Boolean):[];
-      if(!reqIds.length) return res.status(400).json({ok:false,error:"NO_APPLICABLE_REQUIREMENTS"});
-
-      const framework=await sql`SELECT id::text,status FROM compliance_frameworks WHERE id=${p.frameworkId}::uuid`;
-      if(!framework.length) return res.status(404).json({ok:false,error:"FRAMEWORK_NOT_FOUND"});
-
-      const eligible=await sql`
-        SELECT r.id::text
-        FROM compliance_requirements r
-        JOIN framework_requirements fr ON fr.requirement_id=r.id
-        WHERE fr.framework_id=${p.frameworkId}::uuid
-          AND r.status='effective'
-          AND r.id::text = ANY(${reqIds})
-      `;
-      if(eligible.length!==reqIds.length) return res.status(409).json({ok:false,error:"REQUIREMENT_SET_INVALID"});
+      let frameworkId=null;
+      if(p.frameworkId){
+        const framework=await sql`SELECT id::text FROM compliance_frameworks WHERE id=${p.frameworkId}::uuid`;
+        if(!framework.length)return res.status(404).json({ok:false,error:"FRAMEWORK_NOT_FOUND"});
+        frameworkId=p.frameworkId;
+      }
 
       await sql`
         INSERT INTO compliance_assessments
           (id,framework_id,name,objective,period_from,period_to,status,lead_assessor,reviewer,unit_representative,created_at,updated_at)
         VALUES
-          (${assessmentId}::uuid,${p.frameworkId}::uuid,${p.name},${p.objective||null},
+          (${assessmentId}::uuid,${frameworkId}::uuid,${p.name},${p.objective||null},
            ${p.periodFrom||null}::date,${p.periodTo||null}::date,'draft',
            ${p.leadAssessor||null},${p.reviewer||null},${p.unitRepresentative||null},now(),now())
       `;
@@ -302,14 +358,55 @@ export default async function handler(req,res){
           (${scopeId}::uuid,${assessmentId}::uuid,${p.orgId}::uuid,${p.processRef||null},
            ${p.activityRef||null},${p.locationRef||null},${p.scopeNote||null},false)
       `;
-      for(const r of eligible){
+
+      const eligibility=await assessmentEligibility(sql,assessmentId);
+      const requested=Array.isArray(p.requirementIds)?new Set(p.requirementIds.map(String)) : new Set();
+      const attach=requested.size?eligibility.eligible.filter(x=>requested.has(x.id)):[];
+
+      for(const r of attach){
         await sql`
           INSERT INTO requirement_assessments
-            (id,assessment_id,requirement_id,workflow_status,compliance_result)
-          VALUES(${crypto.randomUUID()}::uuid,${assessmentId}::uuid,${r.id}::uuid,'to_do','not_assessed')
+            (id,assessment_id,requirement_id,workflow_status,compliance_result,requirement_snapshot,scope_snapshot,eligibility_snapshot)
+          VALUES(${crypto.randomUUID()}::uuid,${assessmentId}::uuid,${r.id}::uuid,'to_do','not_assessed',
+                 ${JSON.stringify(requirementSnapshot(r))}::jsonb,${JSON.stringify(eligibility.scope)}::jsonb,
+                 ${JSON.stringify({approved:r.approved,unitMatch:r.unitMatch,processMatch:r.processMatch,activityMatch:r.activityMatch,sourceEffective:r.sourceEffective})}::jsonb)
         `;
       }
-      return res.status(201).json({ok:true,record:{id:assessmentId,status:"draft",requirementCount:eligible.length}});
+      return res.status(201).json({ok:true,record:{id:assessmentId,status:"draft",requirementCount:attach.length},eligibility:eligibility.counts});
+    }
+
+    if(command==="assessment.eligibility"){
+      assertPermission(user,"manage_assessment");
+      const ctx=await assessmentContext(sql,p.assessmentId);
+      if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      const eligibility=await assessmentEligibility(sql,p.assessmentId);
+      return res.status(200).json({ok:true,...eligibility});
+    }
+
+    if(command==="assessment.refreshRequirements"){
+      assertPermission(user,"manage_assessment");
+      const ctx=await assessmentContext(sql,p.assessmentId);
+      if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
+      assertOrgScope(user,ctx.orgId);
+      if(ctx.lockedAt)return res.status(409).json({ok:false,error:"ASSESSMENT_SCOPE_LOCKED"});
+      const eligibility=await assessmentEligibility(sql,p.assessmentId);
+      const existing=await sql`SELECT requirement_id::text AS "requirementId" FROM requirement_assessments WHERE assessment_id=${p.assessmentId}::uuid`;
+      const existingSet=new Set(existing.map(x=>x.requirementId));
+      let added=0;
+      for(const r of eligibility.eligible){
+        if(existingSet.has(r.id))continue;
+        await sql`
+          INSERT INTO requirement_assessments
+            (id,assessment_id,requirement_id,workflow_status,compliance_result,requirement_snapshot,scope_snapshot,eligibility_snapshot)
+          VALUES(${crypto.randomUUID()}::uuid,${p.assessmentId}::uuid,${r.id}::uuid,'to_do','not_assessed',
+                 ${JSON.stringify(requirementSnapshot(r))}::jsonb,${JSON.stringify(eligibility.scope)}::jsonb,
+                 ${JSON.stringify({approved:r.approved,unitMatch:r.unitMatch,processMatch:r.processMatch,activityMatch:r.activityMatch,sourceEffective:r.sourceEffective})}::jsonb)
+        `;
+        added++;
+      }
+      await recordAssessmentDecision(sql,user,p.assessmentId,"refresh_eligible_requirements",ctx.status,ctx.status,{eligibility:eligibility.counts,added});
+      return res.status(200).json({ok:true,added,eligibility:eligibility.counts});
     }
 
     if(command==="assessment.assignRequirements"){
@@ -798,14 +895,26 @@ export default async function handler(req,res){
           source_clause=${p.sourceClause||null},
           applicability=${p.applicability||null},
           obligation_type=COALESCE(${p.obligationType||null},obligation_type),
+          mandatory_level=COALESCE(${p.mandatoryLevel||null},mandatory_level),
           expected_evidence=${p.expectedEvidence||null},
           test_procedure=${p.testProcedure||null},
+          verification_method=${p.verificationMethod||p.testProcedure||null},
+          actor_text=${p.actorText||null},action_text=${p.actionText||null},object_text=${p.objectText||null},
+          condition_text=${p.conditionText||null},exception_text=${p.exceptionText||null},
+          timing_text=${p.timingText||null},frequency_text=${p.frequencyText||null},
+          control_point=${p.controlPoint||null},control_objective=${p.controlObjective||null},
+          applicable_org_refs=${JSON.stringify(p.applicableOrgRefs||[])}::jsonb,
+          applicable_process_refs=${JSON.stringify(p.applicableProcessRefs||[])}::jsonb,
+          applicable_activity_refs=${JSON.stringify(p.applicableActivityRefs||[])}::jsonb,
+          applicable_role_refs=${JSON.stringify(p.applicableRoleRefs||[])}::jsonb,
           updated_at=now()
         WHERE id=${p.id}::uuid AND review_status<>'published'
         RETURNING id::text,review_status AS "reviewStatus"
       `;
       if(!rows.length)return res.status(404).json({ok:false,error:"DRAFT_REQUIREMENT_NOT_EDITABLE"});
-      const changedFields=["obligation","sourceClause","applicability","obligationType","expectedEvidence","testProcedure"].filter(k=>p[k]!==undefined);
+      const changedFields=["obligation","sourceClause","applicability","obligationType","mandatoryLevel","expectedEvidence","testProcedure",
+        "actorText","actionText","objectText","conditionText","exceptionText","timingText","frequencyText","controlPoint","controlObjective",
+        "applicableOrgRefs","applicableProcessRefs","applicableActivityRefs","applicableRoleRefs"].filter(k=>p[k]!==undefined);
       await recordDraftDecision(sql,user,before,before.aiGenerated?"human_edit_ai_draft":"edit_draft",
         before.reviewStatus,before.reviewStatus,p.reviewNote||null,{changedFields});
       return res.status(200).json({ok:true,record:rows[0]});
@@ -819,9 +928,16 @@ export default async function handler(req,res){
       const beforeRows=await sql`
         SELECT id::text,review_status AS "reviewStatus",ai_generated AS "aiGenerated",
                ai_confidence AS "aiConfidence",ai_engine AS "aiEngine",ai_schema_version AS "aiSchemaVersion",
-               ai_review_reasons AS "aiReviewReasons",ai_uncertainties AS uncertainties
+               ai_review_reasons AS "aiReviewReasons",ai_uncertainties AS uncertainties,
+               obligation,source_clause AS "sourceClause",actor_text AS "actorText",action_text AS "actionText",
+               expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure"
         FROM draft_requirements WHERE id::text = ANY(${ids}) AND review_status<>'published'
       `;
+      if(status==="accepted"){
+        const incomplete=beforeRows.filter(x=>![x.obligation,x.sourceClause,x.actorText,x.actionText,x.expectedEvidence,x.testProcedure].every(v=>String(v||"").trim().length>0));
+        if(incomplete.length)return res.status(409).json({ok:false,error:"DRAFT_REVIEW_INCOMPLETE",ids:incomplete.map(x=>x.id),
+          required:["obligation","sourceClause","actorText","actionText","expectedEvidence","testProcedure"]});
+      }
       await sql`
         UPDATE draft_requirements
         SET review_status=${status},reviewed_by=${user.id},
@@ -839,13 +955,25 @@ export default async function handler(req,res){
       assertPermission(user,"manage_framework");
       const ids=Array.isArray(p.ids)?p.ids.filter(Boolean):[];
       if(!ids.length)return res.status(400).json({ok:false,error:"NO_DRAFT_REQUIREMENTS"});
-      const fwRows=await sql`SELECT id::text,code,status FROM compliance_frameworks WHERE id=${p.frameworkId}::uuid`;
-      if(!fwRows.length)return res.status(404).json({ok:false,error:"FRAMEWORK_NOT_FOUND"});
-      const fw=fwRows[0];
+
+      let fw=null;
+      if(p.frameworkId){
+        const fwRows=await sql`SELECT id::text,code,status FROM compliance_frameworks WHERE id=${p.frameworkId}::uuid`;
+        if(!fwRows.length)return res.status(404).json({ok:false,error:"FRAMEWORK_NOT_FOUND"});
+        fw=fwRows[0];
+      }
+
       const drafts=await sql`
-        SELECT id::text,source_id::text AS "sourceId",source_clause AS "sourceClause",original_text AS "originalText",
-               obligation,applicability,obligation_type AS "obligationType",mandatory_level AS "mandatoryLevel",
-               expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure",
+        SELECT id::text,source_id::text AS "sourceId",origin_assessment_id::text AS "originAssessmentId",
+               source_clause AS "sourceClause",original_text AS "originalText",obligation,applicability,
+               obligation_type AS "obligationType",mandatory_level AS "mandatoryLevel",
+               expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure",verification_method AS "verificationMethod",
+               actor_text AS "actorText",action_text AS "actionText",object_text AS "objectText",
+               condition_text AS "conditionText",exception_text AS "exceptionText",timing_text AS "timingText",
+               frequency_text AS "frequencyText",control_point AS "controlPoint",control_objective AS "controlObjective",
+               applicable_org_refs AS "applicableOrgRefs",applicable_process_refs AS "applicableProcessRefs",
+               applicable_activity_refs AS "applicableActivityRefs",applicable_role_refs AS "applicableRoleRefs",
+               obligation_key AS "obligationKey",
                review_status AS "reviewStatus",ai_generated AS "aiGenerated",ai_confidence AS "aiConfidence",
                ai_engine AS "aiEngine",ai_schema_version AS "aiSchemaVersion",
                ai_review_reasons AS "aiReviewReasons",ai_uncertainties AS uncertainties
@@ -854,34 +982,43 @@ export default async function handler(req,res){
         ORDER BY created_at,id
       `;
       if(drafts.length!==ids.length)return res.status(409).json({ok:false,error:"DRAFT_SET_NOT_ACCEPTED"});
-      const existing=await sql`
-        SELECT code FROM compliance_requirements
-        WHERE code LIKE ${fw.code+"-%"}
-      `;
+
+      const prefix=fw?fw.code:"REQ";
+      const existing=await sql`SELECT code FROM compliance_requirements WHERE code LIKE ${prefix+"-%"}`;
       let max=0;
-      for(const row of existing){
-        const m=String(row.code||"").match(/-(\d+)$/);if(m)max=Math.max(max,Number(m[1]));
-      }
+      for(const row of existing){const m=String(row.code||"").match(/-(\d+)$/);if(m)max=Math.max(max,Number(m[1]));}
+
       const created=[];
       for(let i=0;i<drafts.length;i++){
-        const d=drafts[i],rid=crypto.randomUUID(),code=fw.code+"-"+String(max+i+1).padStart(3,"0");
+        const d=drafts[i],rid=crypto.randomUUID(),code=prefix+"-"+String(max+i+1).padStart(3,"0");
+        const dup=d.obligationKey?await sql`SELECT id::text,code FROM compliance_requirements WHERE obligation_key=${d.obligationKey} AND status<>'rejected' LIMIT 1`:[];
+        if(dup.length)return res.status(409).json({ok:false,error:"DUPLICATE_OFFICIAL_REQUIREMENT",draftId:d.id,existing:dup[0]});
         await sql`
           INSERT INTO compliance_requirements
             (id,code,title,description,source_id,source_clause,assessable,mandatory_level,test_procedure,
-             expected_evidence,applicability,obligation_type,status,created_at)
+             expected_evidence,applicability,obligation_type,status,origin_assessment_id,
+             actor_text,action_text,object_text,condition_text,exception_text,timing_text,frequency_text,
+             control_point,control_objective,verification_method,
+             applicable_org_refs,applicable_process_refs,applicable_activity_refs,applicable_role_refs,
+             obligation_key,requirement_version,created_at)
           VALUES
             (${rid}::uuid,${code},${d.obligation},${d.originalText||null},${d.sourceId}::uuid,
-             ${d.sourceClause||null},true,${d.mandatoryLevel||"review"},${d.testProcedure||"Cần xác định"},
-             ${d.expectedEvidence||"Cần xác định"},${d.applicability||null},${d.obligationType||"general"},
-             'pending_approval',now())
+             ${d.sourceClause||null},true,${d.mandatoryLevel||"review"},${d.testProcedure||null},
+             ${d.expectedEvidence||null},${d.applicability||null},${d.obligationType||"general"},'pending_approval',
+             ${d.originAssessmentId||null}::uuid,${d.actorText||null},${d.actionText||null},${d.objectText||null},
+             ${d.conditionText||null},${d.exceptionText||null},${d.timingText||null},${d.frequencyText||null},
+             ${d.controlPoint||null},${d.controlObjective||null},${d.verificationMethod||d.testProcedure||null},
+             ${JSON.stringify(d.applicableOrgRefs||[])}::jsonb,${JSON.stringify(d.applicableProcessRefs||[])}::jsonb,
+             ${JSON.stringify(d.applicableActivityRefs||[])}::jsonb,${JSON.stringify(d.applicableRoleRefs||[])}::jsonb,
+             ${d.obligationKey||null},1,now())
         `;
-        await sql`INSERT INTO framework_requirements(framework_id,requirement_id) VALUES(${p.frameworkId}::uuid,${rid}::uuid)`;
+        if(fw)await sql`INSERT INTO framework_requirements(framework_id,requirement_id) VALUES(${fw.id}::uuid,${rid}::uuid)`;
         await sql`UPDATE draft_requirements SET review_status='published',reviewed_by=${user.id},reviewed_at=now(),updated_at=now() WHERE id=${d.id}::uuid`;
-        await recordDraftDecision(sql,user,d,"publish_reviewed_obligation","accepted","published",p.reviewNote||null,{requirementId:rid,code});
+        await recordDraftDecision(sql,user,d,"publish_reviewed_obligation","accepted","published",p.reviewNote||null,{requirementId:rid,code,frameworkId:fw?.id||null});
         created.push({id:rid,code});
       }
-      await sql`UPDATE compliance_frameworks SET status='pending_approval',updated_at=now() WHERE id=${p.frameworkId}::uuid`;
-      return res.status(201).json({ok:true,created,count:created.length,status:"pending_approval"});
+      if(fw)await sql`UPDATE compliance_frameworks SET status='pending_approval',updated_at=now() WHERE id=${fw.id}::uuid`;
+      return res.status(201).json({ok:true,created,count:created.length,status:"pending_approval",frameworkId:fw?.id||null});
     }
 
     if(command==="draftRequirement.review"){
