@@ -25,6 +25,15 @@ jobs:
         run: node tests/db-schema.mjs
       - name: Run Production Core QA
         run: node tests/production-core.mjs
+      - name: Derive smoke token hash
+        env:
+          SMOKE_TOKEN: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          if [ -z "${SMOKE_TOKEN:-}" ]; then
+            echo "SMOKE_TOKEN_SHA256=MISSING"
+            exit 31
+          fi
+          node -e 'const c=require("crypto"); console.log("SMOKE_TOKEN_SHA256="+c.createHash("sha256").update(process.env.SMOKE_TOKEN).digest("hex"))'
       - name: Check application syntax
         run: |
           node --check access-control.js
