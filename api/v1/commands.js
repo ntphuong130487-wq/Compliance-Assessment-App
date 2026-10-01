@@ -236,8 +236,8 @@ export default async function handler(req,res){
           VALUES
             (${linkId}::uuid,${assessmentId}::uuid,${id}::uuid,${role},${extractionEligible},
              ${relevanceStatus},${effectivenessStatus},${p.relevanceNote||null},${user.id},now(),
-             ${relevanceStatus==="verified"&&effectivenessStatus==="verified"?user.id:null},
-             ${relevanceStatus==="verified"&&effectivenessStatus==="verified"?"now()":null})
+             CASE WHEN ${relevanceStatus==="verified"&&effectivenessStatus==="verified"} THEN ${user.id} ELSE NULL END,
+             CASE WHEN ${relevanceStatus==="verified"&&effectivenessStatus==="verified"} THEN now() ELSE NULL END)
         `
       ]);
       return res.status(201).json({ok:true,record:rows[0][0],link:{id:linkId,assessmentId,sourceRole:role,extractionEligible,relevanceStatus,effectivenessStatus}});
