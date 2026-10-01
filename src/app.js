@@ -389,10 +389,18 @@ p.onchange=function(){
 }
 function searchRegulations(){
 if(!guard("manage_framework"))return;
-modal('<h3>Tìm quy định nhà nước</h3><form id="srcSearchForm"><div class="field"><label>Từ khóa</label><input name="query" required placeholder="Ví dụ: an toàn thực phẩm, hóa chất, lao động..."></div><div class="field"><label>Ghi chú phạm vi</label><textarea name="scope" placeholder="Cơ quan ban hành, lĩnh vực, thời kỳ..."></textarea></div><div class="search-warning">Nguồn tìm kiếm pháp lý công khai chưa được cấu hình. Hệ thống sẽ lưu truy vấn và không tạo kết quả giả.</div><button class="btn">Kiểm tra nguồn tìm kiếm</button></form>');
-document.getElementById("srcSearchForm").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),src={id:id("src"),title:"Tìm quy định: "+d.query,sourceType:"Quy định nhà nước",inputMode:"search",query:d.query,scope:d.scope,status:"draft",createdAt:now(),sourceCode:"",issuer:"",issueDate:"",effectiveFrom:"",effectiveTo:"",version:"",supersedesRef:"",owner:""};S.sources.unshift(src);
-  try{var res=await fetch("/api/regulations/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:d.query,scope:d.scope})});var data=await res.json();src.status=res.ok?"extracted":"search_not_configured";src.error=data.message||data.error||""}catch(e){src.status="search_not_configured";src.error="Chưa kết nối nguồn tìm kiếm"}
-  save();document.getElementById("mb").remove();render();
+if(!S.assessments.length){modal('<h3>Chưa có phạm vi đánh giá</h3><p>Hãy tạo cuộc đánh giá trước khi tìm nguồn quy định.</p>');return}
+modal('<h3>Tìm quy định nhà nước</h3><form id="srcSearchForm">'+assessmentSourceContextFields()+'<div class="field"><label>Từ khóa</label><input name="query" required placeholder="Ví dụ: bảo vệ dữ liệu cá nhân, lao động, an toàn thực phẩm..."></div><div class="field"><label>Ghi chú phạm vi tìm kiếm</label><textarea name="scope" placeholder="Cơ quan ban hành, lĩnh vực, thời kỳ..."></textarea></div><div class="search-warning">Kết quả tìm kiếm chỉ là nguồn ứng viên. Không tạo nguồn căn cứ hoặc nghĩa vụ cho tới khi người dùng chọn văn bản, xác nhận liên quan và hiệu lực.</div><button class="btn">Tìm nguồn</button></form><div id="regSearchResult"></div>');
+document.getElementById("srcSearchForm").onsubmit=async function(ev){
+  ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),box=document.getElementById("regSearchResult");
+  box.innerHTML='<div class="small muted">Đang kiểm tra nguồn tìm kiếm...</div>';
+  try{
+    var res=await fetch("/api/regulations/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:d.query,scope:d.scope,assessmentId:d.assessmentId})});
+    var data=await res.json();
+    if(!res.ok){box.innerHTML='<div class="search-warning">'+esc(data.message||data.error||"Nguồn tìm kiếm chưa được cấu hình.")+'</div>';return}
+    var rows=Array.isArray(data.results)?data.results:[];
+    box.innerHTML=rows.length?'<div class="stack">'+rows.map(function(x){return'<div class="source-card"><b>'+esc(x.title||x.name||"Nguồn ứng viên")+'</b><div class="small muted">'+esc(x.issuer||"")+(x.effectiveDate?' · '+esc(x.effectiveDate):"")+'</div><div class="small">Chưa được thêm vào kế hoạch nguồn. Cần xác nhận văn bản trước khi sử dụng.</div></div>'}).join("")+'</div>':'<div class="search-warning">Không có kết quả. Không tạo dữ liệu giả.</div>';
+  }catch(e){box.innerHTML='<div class="search-warning">Chưa kết nối nguồn tìm kiếm công khai. Không tạo dữ liệu giả.</div>'}
 }
 }
 function editSourceMetadata(sid){
