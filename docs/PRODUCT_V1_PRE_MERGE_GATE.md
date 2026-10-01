@@ -4,6 +4,10 @@ Branch: `feature/product-v1-ui-ai`
 Target: `main`
 
 ## Gate A — Code & regression
+- [x] Latest merge-candidate built successfully on Vercel staging
+  - Commit: `fb4ead221c5f968276d213a036f9dbc7cec100cc`
+  - Deployment: `dpl_4AdD8vRpGu4owqg4kuUKXv4qPkCm` — READY/STAGED
+  - Vercel runtime: Node 24.x, 11 serverless functions
 - [x] Static QA
 - [x] RBAC / org-scope regression
 - [x] Product workflow regression
