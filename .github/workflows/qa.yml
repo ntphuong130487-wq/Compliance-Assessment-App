@@ -65,6 +65,9 @@ jobs:
           node --check lib/obligation-extractor.js
           node --check lib/document-intelligence.js
           node --check lib/ai-obligation-extractor.js
+          node --check lib/source-context.js
+          node --check lib/draft-requirement-store.js
+          node --check lib/requirement-eligibility.js
           node --check src/ui/product-ui.js
           node --check src/ui/view-models.js
           node --check src/screens/shared.js
@@ -133,12 +136,15 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/007_finding_remediation_model.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/008_action_change_governance.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/009_requirement_assessor_assignment.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/010_assessment_scoped_obligation_v2.sql
       - name: Verify migration idempotence
         run: |
           psql -v ON_ERROR_STOP=1 -f db/migrations/005_ai_obligation_intelligence.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/006_ai_review_audit.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/007_finding_remediation_model.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/008_action_change_governance.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/009_requirement_assessor_assignment.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/010_assessment_scoped_obligation_v2.sql
       - name: Verify migrated objects
         run: |
           psql -v ON_ERROR_STOP=1 <<'SQL'
@@ -183,6 +189,24 @@ jobs:
             IF NOT EXISTS (
               SELECT 1 FROM pg_indexes WHERE indexname='ux_ra_primary_assessor'
             ) THEN RAISE EXCEPTION 'primary assessor unique index missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.tables WHERE table_name='assessment_sources'
+            ) THEN RAISE EXCEPTION 'assessment_sources missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='draft_requirements' AND column_name='actor_text'
+            ) THEN RAISE EXCEPTION 'draft obligation v2 fields missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='compliance_requirements' AND column_name='applicable_process_refs'
+            ) THEN RAISE EXCEPTION 'requirement structured scope missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='requirement_assessments' AND column_name='eligibility_snapshot'
+            ) THEN RAISE EXCEPTION 'eligibility snapshot missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint WHERE conname='chk_assessment_source_role'
+            ) THEN RAISE EXCEPTION 'assessment source role constraint missing'; END IF;
           END $$;
           SQL
 

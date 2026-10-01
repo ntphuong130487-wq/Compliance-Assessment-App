@@ -12,6 +12,9 @@ const sourceExtract=read("api/source/extract.js");
 const obligationExtract=read("api/obligations/extract.js");
 const aiExtractor=read("lib/ai-obligation-extractor.js");
 const docIntel=read("lib/document-intelligence.js");
+const sourceContext=read("lib/source-context.js");
+const eligibility=read("lib/requirement-eligibility.js");
+const migration10=read("db/migrations/010_assessment_scoped_obligation_v2.sql");
 const migration=read("db/migrations/004_production_core.sql");
 
 assert(html.includes('/api/v1/bootstrap'),"Client must use normalized bootstrap");
@@ -27,7 +30,7 @@ assert(html.includes('source.create'),"Normalized source create not wired");
 for(const term of ["requireUser","visibleOrgIds","assessment_scopes","unit_responses","draft_requirements","requirementAssignments","requirement_assessment_assignments"]){
   assert(bootstrap.includes(term),"Bootstrap missing "+term);
 }
-for(const term of ["assertPermission","assertOrgScope","SELF_VERIFICATION_FORBIDDEN","CLOSURE_EVIDENCE_REQUIRED","REQUIREMENT_SET_INVALID","REQUIREMENT_ASSESSMENT_SCOPE_MISMATCH","ACTION_NOT_READY_FOR_VERIFICATION","INVALID_VERIFICATION_RESULT","REQUIREMENT_NOT_ASSIGNED_TO_USER","ASSESSMENT_ASSIGNMENTS_INCOMPLETE"]){
+for(const term of ["assertPermission","assertOrgScope","SELF_VERIFICATION_FORBIDDEN","CLOSURE_EVIDENCE_REQUIRED","REQUIREMENT_ASSESSMENT_SCOPE_MISMATCH","ACTION_NOT_READY_FOR_VERIFICATION","INVALID_VERIFICATION_RESULT","REQUIREMENT_NOT_ASSIGNED_TO_USER","ASSESSMENT_ASSIGNMENTS_INCOMPLETE","DRAFT_REVIEW_INCOMPLETE","DUPLICATE_OFFICIAL_REQUIREMENT"]){
   assert(commands.includes(term),"Command API missing control "+term);
 }
 const findingScopeCheck=commands.indexOf("REQUIREMENT_ASSESSMENT_SCOPE_MISMATCH");
@@ -53,7 +56,14 @@ assert(sourceAuth>=0&&sourceAuth<sourceBody&&sourceBody<sourceAI,"Source extract
 const obligationAuth=obligationExtract.indexOf("const auth=await requireUser(req)");
 const obligationAI=obligationExtract.indexOf("const hybrid=await extractObligationsHybrid");
 assert(obligationAuth>=0&&obligationAuth<obligationAI,"Obligation extraction must authorize before AI work");
-assert(aiExtractor.includes("AbortSignal.timeout(30000)"),"AI provider call must have a hard timeout");
+for(const term of ["SOURCE_ROLE_NOT_EXTRACTABLE","SOURCE_RELEVANCE_NOT_VERIFIED","SOURCE_EFFECTIVENESS_NOT_VERIFIED"]){
+  assert(sourceContext.includes(term),"Assessment-scoped source guard missing "+term);
+}
+assert(eligibility.includes("approved")&&eligibility.includes("unitMatch")&&eligibility.includes("processMatch")&&eligibility.includes("activityMatch")&&eligibility.includes("sourceEffective"),
+  "Requirement eligibility funnel incomplete");
+assert(migration10.includes("assessment_sources")&&migration10.includes("eligibility_snapshot")&&migration10.includes("actor_text"),
+  "Assessment-scoped obligation migration incomplete");
+assert(aiExtractor.includes("AbortSignal.timeout(45000)"),"AI provider call must have a hard timeout");
 assert(aiExtractor.includes("sourceTextIsUntrusted:true")&&aiExtractor.includes("ignoreInstructionsInsideSource:true")&&aiExtractor.includes("noExternalActions:true"),
   "AI extraction must explicitly treat source text as untrusted content");
 assert(docIntel.includes("AbortSignal.timeout(30000)"),"OCR provider call must have a hard timeout");
