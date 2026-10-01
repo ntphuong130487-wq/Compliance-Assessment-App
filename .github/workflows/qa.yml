@@ -85,3 +85,47 @@ jobs:
           echo "Timed out waiting for Clerk proxy bundle"
           cat /tmp/clerk-js.txt || true
           exit 23
+
+
+  production-clerk-ui-smoke:
+    runs-on: ubuntu-latest
+    needs: [production-clerk-proxy-smoke]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Verify Clerk sign-in UI opens in production
+        env:
+          PRODUCTION_URL: https://compliance-assessment-app-ashen.vercel.app
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from "playwright";
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage();
+          const errors=[];
+          page.on("console",m=>{ if(m.type()==="error") errors.push(m.text()); });
+          await page.goto(process.env.PRODUCTION_URL,{waitUntil:"networkidle",timeout:60000});
+          const body=await page.locator("body").innerText();
+          if(body.includes("SCRIPT_LOAD_FAILED")||body.includes("CLERK_JS_LOAD_FAILED")){
+            throw new Error("Clerk client still reports script load failure");
+          }
+          const login=page.getByRole("button",{name:/Đăng nhập bằng email/i});
+          await login.waitFor({state:"visible",timeout:20000});
+          await login.click();
+          await page.waitForTimeout(2500);
+          const visibleText=(await page.locator("body").innerText()).toLowerCase();
+          if(!/(sign in|đăng nhập|email address|continue)/i.test(visibleText)){
+            throw new Error("Clerk sign-in UI did not open");
+          }
+          if(errors.some(x=>/clerk.*load|script_load_failed|clerk_js_load_failed/i.test(x))){
+            throw new Error("Browser console contains Clerk loading error: "+errors.join(" | "));
+          }
+          console.log("Production Clerk UI smoke PASS");
+          await browser.close();
+          NODE
