@@ -402,8 +402,11 @@ document.getElementById("sourceMetaEdit").onsubmit=async function(ev){ev.prevent
 }
 function provideSourceText(sid){
 var s=S.sources.find(function(x){return x.id===sid});if(!s||!guard("manage_framework"))return;
-modal('<h3>Nhập text thay thế cho file scan</h3><form id="sourceFallbackText"><div class="field"><label>Nội dung đã OCR/đọc thủ công</label><textarea name="text" required style="min-height:240px"></textarea></div><button class="btn">Bóc tách từ nội dung này</button></form>');
-document.getElementById("sourceFallbackText").onsubmit=function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));s.excerpt=d.text.slice(0,1000);s.error="";document.getElementById("mb").remove();extractTextSource(s,d.text)}
+var candidates=(S.assessmentSources||[]).filter(function(l){return l.sourceId===sid&&l.extractionEligible&&l.relevanceStatus==="verified"&&l.effectivenessStatus==="verified"});
+if(!candidates.length){modal('<h3>Chưa thể bóc nghĩa vụ</h3><p>Nguồn này chưa được xác nhận là <b>nguồn căn cứ</b> liên quan và còn hiệu lực trong một cuộc đánh giá.</p>');return}
+var options=candidates.map(function(l){var a=S.assessments.find(function(x){return x.id===l.assessmentId});return'<option value="'+l.assessmentId+'">'+esc(a&&a.name||l.assessmentId)+'</option>'}).join("");
+modal('<h3>Nhập text thay thế cho file scan</h3><form id="sourceFallbackText"><div class="field"><label>Cuộc đánh giá/phạm vi</label><select name="assessmentId">'+options+'</select></div><div class="field"><label>Nội dung đã OCR/đọc thủ công</label><textarea name="text" required style="min-height:240px"></textarea></div><button class="btn">Bóc tách từ nội dung này</button></form>');
+document.getElementById("sourceFallbackText").onsubmit=function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));s.excerpt=d.text.slice(0,1000);s.error="";document.getElementById("mb").remove();extractTextSource(s,d.text,d.assessmentId)}
 }
 function editDraft(did){
 var d=S.draftRequirements.find(function(x){return x.id===did});if(!d)return;
@@ -482,15 +485,15 @@ if(!ids.length){modal('<h3>Chưa chọn nghĩa vụ</h3><p>Chọn ít nhất m�
 if(syncMode==="normalized"){apiCommand("draftRequirement.reviewBatch",{ids:ids,status:status}).then(render).catch(function(e){alert("Không cập nhật được nghĩa vụ: "+e.message)});return}
 S.draftRequirements.forEach(function(d){if(ids.indexOf(d.id)>=0)d.reviewStatus=status});save();render();
 }
-function frameworks(){return shell("Nguồn quy định & Khung tuân thủ",Screens.frameworks(screenContext()))}
+function frameworks(){return shell("Nguồn căn cứ & Nghĩa vụ tuân thủ",Screens.frameworks(screenContext()))}
 function requirementApplies(q,ctx){
-if(!q||q.assessable===false||q.status==="rejected"||q.status==="pending_approval")return false;
-var raw=(q.applicability||"").trim().toLowerCase();
-if(!raw)return true;
+if(!q||q.assessable===false||q.status!=="effective")return false;
+function list(v){return Array.isArray(v)?v.map(function(x){return String(x||"").trim().toLowerCase()}).filter(Boolean):[]}
+function match(xs,vals){xs=list(xs);if(!xs.length)return true;vals=vals.map(function(x){return String(x||"").trim().toLowerCase()}).filter(Boolean);return xs.some(function(x){return vals.some(function(y){return x===y||x.indexOf(y)>=0||y.indexOf(x)>=0})})}
 var org=S.org.find(function(x){return x.id===ctx.orgId});
-var hay=[org&&org.name,ctx.processRef,ctx.activityRef,ctx.locationRef].filter(Boolean).join(" ").toLowerCase();
-var tokens=raw.split(/[,;|]/).map(function(x){return x.trim()}).filter(Boolean);
-return tokens.some(function(t){return hay.indexOf(t)>=0});
+return match(q.applicableOrgRefs,[ctx.orgId,org&&org.name])&&
+       match(q.applicableProcessRefs,[ctx.processRef])&&
+       match(q.applicableActivityRefs,[ctx.activityRef]);
 }
 function applicableRequirements(fw,ctx){
 return fw.reqIds.map(function(rid){return S.requirements.find(function(x){return x.id===rid})})
