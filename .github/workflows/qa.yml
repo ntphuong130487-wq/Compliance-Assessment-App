@@ -59,7 +59,7 @@ jobs:
     steps:
       - name: Verify production Clerk proxy path
         env:
-          PRODUCTION_URL: https://compliance-assessment-app-ashen.vercel.app
+          PRODUCTION_URL: https://compliance-assessment-app-ntphuong130487.vercel.app
         run: |
           set -euo pipefail
           for i in $(seq 1 3); do
@@ -102,7 +102,7 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Verify Clerk sign-in UI opens in production
         env:
-          PRODUCTION_URL: https://compliance-assessment-app-ashen.vercel.app
+          PRODUCTION_URL: https://compliance-assessment-app-ntphuong130487.vercel.app
         run: |
           node --input-type=module <<'NODE'
           import { chromium } from "playwright";
