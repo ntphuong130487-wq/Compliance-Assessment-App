@@ -14,8 +14,8 @@ Target: `main`
 - [x] Browser regression across 8 screens
 - [x] PDF/DOCX/scan OCR routing regression
 - [x] Evidence authorization + atomicity regression
-- [x] Migration 005/006 dry-run on PostgreSQL 16
-- [x] Migration idempotence verification
+- [x] Migration 005–009 dry-run on PostgreSQL baseline
+- [x] Migration 005–009 idempotence verification
 
 ## Gate B — Security controls
 - [x] Evidence read requires authenticated, provisioned user
@@ -38,15 +38,24 @@ Target: `main`
 - [x] Clerk production keys configured
 - [x] Vercel Blob store connected
 - [ ] Production readiness endpoint checked after final merge candidate deployment
-  - Current blocker: production deployment is READY/PROMOTED, but the available Vercel MCP connection cannot fetch the project URL endpoint; endpoint smoke test remains explicitly open.
 - [ ] Private Blob upload/read smoke test with authenticated production user
 
 ## Gate D — Database
-- [x] Migration 005/006 dry-run against clean PostgreSQL baseline
-- [ ] Migration 005/006 dry-run on a Neon branch cloned from the actual production database
-  - Current blocker: Neon connection available to this session is not authorized/scoped to the production project; do not run against a guessed project ID.
-- [ ] Verify migrated columns/indexes/constraints on Neon clone
-- [ ] Apply migration to production only after Gate A–D pass
+- [x] Production Neon project positively identified
+  - Project: `falling-river-32945726` — Compliance Assessment App Prod SG
+  - Region: `aws-ap-southeast-1`
+  - Production/default branch: `br-noisy-hill-b39cbexd` (`production`)
+- [x] Clone created from actual production branch
+  - Clone: `br-nameless-cell-b33aqvnr`
+  - Name: `dryrun-migration-005-009-20261001`
+- [x] Migration 005–009 dry-run completed successfully on production clone
+- [x] Migrated columns/indexes/check constraints verified on clone
+- [x] Migration 005–009 re-run successfully to verify idempotence
+- [x] Schema drift found and fixed in migration 007
+  - Existing `remediation_actions.action_type` column could bypass intended default/NOT NULL because `ADD COLUMN IF NOT EXISTS` does not repair existing column attributes.
+  - Fix committed on feature branch: `f4a035f37816a6271db99b2bb7b66e3db335bf12`.
+  - Verified on clone: `action_type text NOT NULL DEFAULT 'mandatory_remediation'`.
+- [ ] Apply migration 005–009 to production only after remaining Gate C smoke checks pass
 
 ## Merge rule
 Do not merge while any unchecked Gate C/D item remains. Use **Squash merge** after final verification.
