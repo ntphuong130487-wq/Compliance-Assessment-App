@@ -41,11 +41,14 @@ Target: `main`
   - Production alias: `compliance-assessment-app-ashen.vercel.app`
   - HTTP 200; `productionReady=true`; `missing=[]`
   - Clerk configured; normalized DB ready; production core ready; Vercel Blob configured via OIDC
-- [x] Latest feature branch deployed successfully to Vercel Preview
-  - Latest commit: `0d953cd0d8239bcef35ca7404a55ab8a176ad2db`
+- [x] Latest feature branch deployed successfully to Vercel Preview and automation bypass verified
+  - Latest verified commit: `712417475e14a571af197d5384a15391713c0ecf`
   - Vercel status: SUCCESS
-  - Preview is intentionally behind Vercel Deployment Protection; unauthenticated smoke cannot inspect app readiness there
+  - `VERCEL_AUTOMATION_BYPASS_SECRET` detected by GitHub Actions
+  - Protected preview handshake: 307 -> bypass cookie -> readiness HTTP 200
+  - Preview readiness reached app runtime successfully
 - [ ] Private Blob upload/read smoke test with authenticated production user
+  - Preview environment note: Clerk keys are not configured on Preview, so authenticated smoke must run against Production or Preview must receive separate Clerk credentials.
 
 ## Gate D — Database
 - [x] Production Neon project positively identified
