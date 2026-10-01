@@ -33,6 +33,7 @@ jobs:
           node --check api/system.js
           node --check api/auth.js
           node --check api/users.js
+          node --check api/clerk-proxy.js
           node --check lib/system-routes.js
           node --check lib/auth-routes.js
           node --check lib/user-routes.js
@@ -49,3 +50,38 @@ jobs:
           node --check api/v1/commands.js
           node --check scripts/db-check.mjs
           node --check scripts/db-migrate.mjs
+
+
+  production-clerk-proxy-smoke:
+    runs-on: ubuntu-latest
+    needs: [qa]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Verify production Clerk proxy path
+        env:
+          PRODUCTION_URL: https://compliance-assessment-app-ashen.vercel.app
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 24); do
+            CODE=$(curl -sS -o /tmp/clerk-js.txt -w "%{http_code}"               "$PRODUCTION_URL/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js" || true)
+            echo "Attempt $i/24: HTTP $CODE"
+            if [ "$CODE" = "200" ]; then
+              BYTES=$(wc -c < /tmp/clerk-js.txt)
+              echo "Clerk proxy bundle reachable: $BYTES bytes"
+              if [ "$BYTES" -lt 1000 ]; then
+                echo "Unexpectedly small Clerk JS bundle"
+                cat /tmp/clerk-js.txt || true
+                exit 21
+              fi
+              exit 0
+            fi
+            if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ] || [ "$CODE" = "422" ] || [ "$CODE" = "502" ] || [ "$CODE" = "503" ]; then
+              echo "Clerk proxy returned application/upstream error:"
+              cat /tmp/clerk-js.txt || true
+              exit 22
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for Clerk proxy bundle"
+          cat /tmp/clerk-js.txt || true
+          exit 23
