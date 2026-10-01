@@ -45,7 +45,7 @@
   "rewrites": [
     {
       "source": "/smoke/private-blob",
-      "destination": "/api/smoke"
+      "destination": "/api/system?route=private-blob-smoke"
     },
     {
       "source": "/__clerk/:path*",
