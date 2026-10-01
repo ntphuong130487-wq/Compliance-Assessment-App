@@ -6,8 +6,14 @@ ALTER TABLE findings
   ADD COLUMN IF NOT EXISTS remediation_required boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS remediation_requirement text;
 
+-- Keep this explicit even when action_type already exists from an earlier baseline.
+-- ADD COLUMN IF NOT EXISTS alone does not repair nullability/default drift.
 ALTER TABLE remediation_actions
-  ADD COLUMN IF NOT EXISTS action_type text NOT NULL DEFAULT 'mandatory_remediation';
+  ADD COLUMN IF NOT EXISTS action_type text;
+
+ALTER TABLE remediation_actions
+  ALTER COLUMN action_type SET DEFAULT 'mandatory_remediation',
+  ALTER COLUMN action_type SET NOT NULL;
 
 DO $$
 BEGIN
