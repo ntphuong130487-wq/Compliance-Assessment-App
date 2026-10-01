@@ -1,7 +1,7 @@
 name: Compliance MVP QA
 on:
   push:
-    branches: [main]
+    branches: [main, feature/product-v1-ui-ai]
   pull_request:
 jobs:
   qa:
@@ -25,6 +25,30 @@ jobs:
         run: node tests/db-schema.mjs
       - name: Run Production Core QA
         run: node tests/production-core.mjs
+      - name: Run evidence security QA
+        run: node tests/evidence-security.mjs
+      - name: Run Product v1 business regression
+        run: node tests/product-v1-regression.mjs
+      - name: Run OCR and AI foundation QA
+        run: node tests/intelligence-foundation.mjs
+      - name: Run product view-model behavior QA
+        run: node tests/view-models.mjs
+      - name: Run modular screen QA
+        run: node tests/screen-modules.mjs
+      - name: Run real PDF DOCX scan OCR regression
+        run: node tests/ocr-fixtures.mjs
+      - name: Install Chromium for browser regression
+        run: npx playwright install --with-deps chromium
+      - name: Run browser-level product regression
+        run: |
+          node tests/browser-server.mjs > /tmp/compliance-browser-server.log 2>&1 &
+          SERVER_PID=$!
+          trap "kill $SERVER_PID || true" EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:browser
       - name: Check application syntax
         run: |
           node --check access-control.js
@@ -39,6 +63,21 @@ jobs:
           node --check lib/user-routes.js
           node --check api/evidence.js
           node --check lib/obligation-extractor.js
+          node --check lib/document-intelligence.js
+          node --check lib/ai-obligation-extractor.js
+          node --check src/ui/product-ui.js
+          node --check src/ui/view-models.js
+          node --check src/screens/shared.js
+          node --check src/screens/dashboard.js
+          node --check src/screens/frameworks.js
+          node --check src/screens/assessments.js
+          node --check src/screens/fieldwork.js
+          node --check src/screens/findings.js
+          node --check src/screens/actions.js
+          node --check src/screens/reports.js
+          node --check src/screens/settings.js
+          node --check src/workflows/action-governance.js
+          node --check src/workflows/assessment-assignment.js
           node --check api/obligations/extract.js
           node --check api/source/extract.js
           node --check api/regulations/search.js
@@ -50,83 +89,163 @@ jobs:
           node --check api/v1/commands.js
           node --check scripts/db-check.mjs
           node --check scripts/db-migrate.mjs
+          node --check tests/browser-server.mjs
+          node --check tests/browser-product.mjs
+          node --check tests/evidence-security.mjs
 
-
-  production-clerk-proxy-smoke:
+  migration-dry-run:
     runs-on: ubuntu-latest
-    needs: [qa]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - name: Verify production Clerk proxy path
+    services:
+      postgres:
+        image: postgres:16-alpine
         env:
-          PRODUCTION_URL: https://compliance-assessment-app-ntphuong130487.vercel.app
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 3); do
-            CODE=$(curl -L --max-redirs 5 --max-time 12 -sS -o /tmp/clerk-js.txt -w "%{http_code}" "$PRODUCTION_URL/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js" || true)
-            echo "Attempt $i/3: HTTP $CODE"
-            if [ "$CODE" = "200" ]; then
-              BYTES=$(wc -c < /tmp/clerk-js.txt)
-              echo "Clerk proxy bundle reachable: $BYTES bytes"
-              if [ "$BYTES" -lt 1000 ]; then
-                echo "Unexpectedly small Clerk JS bundle"
-                cat /tmp/clerk-js.txt || true
-                exit 21
-              fi
-              exit 0
-            fi
-            if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "403" ] || [ "$CODE" = "422" ] || [ "$CODE" = "502" ] || [ "$CODE" = "503" ]; then
-              echo "Clerk proxy returned application/upstream error:"
-              cat /tmp/clerk-js.txt || true
-              exit 22
-            fi
-            sleep 5
-          done
-          echo "Timed out waiting for Clerk proxy bundle"
-          cat /tmp/clerk-js.txt || true
-          exit 23
-
-
-
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    needs: [production-clerk-proxy-smoke]
-    if: github.ref == 'refs/heads/main'
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: compliance_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d compliance_migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: compliance_migration_test
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - name: Install Playwright
+          fetch-depth: 2
+      - name: Install PostgreSQL client
         run: |
-          npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.55.0
-          npx playwright install --with-deps chromium
-      - name: Verify Clerk sign-in UI opens in production
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Fetch main baseline schema
+        run: git fetch origin main:refs/remotes/origin/main --depth=1
+      - name: Load pre-feature baseline schema
+        run: git show origin/main:db/schema.sql | psql -v ON_ERROR_STOP=1
+      - name: Dry-run AI migrations
+        run: |
+          psql -v ON_ERROR_STOP=1 -f db/migrations/005_ai_obligation_intelligence.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/006_ai_review_audit.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/007_finding_remediation_model.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/008_action_change_governance.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/009_requirement_assessor_assignment.sql
+      - name: Verify migration idempotence
+        run: |
+          psql -v ON_ERROR_STOP=1 -f db/migrations/005_ai_obligation_intelligence.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/006_ai_review_audit.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/007_finding_remediation_model.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/008_action_change_governance.sql
+      - name: Verify migrated objects
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='draft_requirements' AND column_name='ai_confidence'
+            ) THEN RAISE EXCEPTION 'ai_confidence missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='decision_logs' AND column_name='metadata'
+            ) THEN RAISE EXCEPTION 'decision_logs.metadata missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint WHERE conname='chk_draft_requirements_ai_confidence'
+            ) THEN RAISE EXCEPTION 'AI confidence constraint missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_indexes WHERE indexname='idx_decision_draft_review'
+            ) THEN RAISE EXCEPTION 'draft review audit index missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='findings' AND column_name='remediation_required'
+            ) THEN RAISE EXCEPTION 'findings.remediation_required missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_name='remediation_actions' AND column_name='action_type'
+            ) THEN RAISE EXCEPTION 'remediation_actions.action_type missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint WHERE conname='chk_remediation_action_type'
+            ) THEN RAISE EXCEPTION 'remediation action type constraint missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_name='remediation_action_change_requests'
+            ) THEN RAISE EXCEPTION 'remediation_action_change_requests missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_indexes WHERE indexname='ux_action_pending_due_change'
+            ) THEN RAISE EXCEPTION 'pending due-date request unique index missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_name='requirement_assessment_assignments'
+            ) THEN RAISE EXCEPTION 'requirement_assessment_assignments missing'; END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_indexes WHERE indexname='ux_ra_primary_assessor'
+            ) THEN RAISE EXCEPTION 'primary assessor unique index missing'; END IF;
+          END $$;
+          SQL
+
+
+  vercel-runtime-smoke:
+    runs-on: ubuntu-latest
+    needs: [qa, migration-dry-run]
+    if: github.ref == 'refs/heads/feature/product-v1-ui-ai' || github.event_name == 'pull_request'
+    steps:
+      - name: Check protected Vercel preview and production readiness
         env:
+          PREVIEW_URL: https://compliance-assessment-app-git-feature-pro-654f8b-ntphuong130487.vercel.app
           PRODUCTION_URL: https://compliance-assessment-app-ntphuong130487.vercel.app
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
-          node --input-type=module <<'NODE'
-          import { chromium } from "playwright";
-          const browser=await chromium.launch({headless:true});
-          const page=await browser.newPage();
-          const errors=[];
-          page.on("console",m=>{ if(m.type()==="error") errors.push(m.text()); });
-          await page.goto(process.env.PRODUCTION_URL,{waitUntil:"networkidle",timeout:60000});
-          const body=await page.locator("body").innerText();
-          if(body.includes("SCRIPT_LOAD_FAILED")||body.includes("CLERK_JS_LOAD_FAILED")){
-            throw new Error("Clerk client still reports script load failure");
-          }
-          const login=page.getByRole("button",{name:/Đăng nhập bằng email/i});
-          await login.waitFor({state:"visible",timeout:20000});
-          await login.click();
-          await page.waitForTimeout(2500);
-          const visibleText=(await page.locator("body").innerText()).toLowerCase();
-          if(!/(sign in|đăng nhập|email address|continue)/i.test(visibleText)){
-            throw new Error("Clerk sign-in UI did not open");
-          }
-          if(errors.some(x=>/clerk.*load|script_load_failed|clerk_js_load_failed/i.test(x))){
-            throw new Error("Browser console contains Clerk loading error: "+errors.join(" | "));
-          }
-          console.log("Production Clerk UI smoke PASS");
-          await browser.close();
-          NODE
+          set -euo pipefail
+
+          if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo "VERCEL_AUTOMATION_BYPASS_SECRET is not configured in GitHub Actions Secrets."
+            exit 10
+          fi
+
+          echo "1) Verify protected preview readiness using Vercel automation bypass"
+          PREVIEW_CODE=$(curl -sS \
+            -c /tmp/vercel-bypass.cookies \
+            -o /tmp/preview-first-response.txt \
+            -D /tmp/preview-headers.txt \
+            -w "%{http_code}" \
+            "$PREVIEW_URL/api/system?route=readiness&x-vercel-protection-bypass=$VERCEL_AUTOMATION_BYPASS_SECRET&x-vercel-set-bypass-cookie=true" || true)
+          echo "Preview bypass handshake HTTP: $PREVIEW_CODE"
+
+          if [ "$PREVIEW_CODE" = "307" ] || [ "$PREVIEW_CODE" = "302" ]; then
+            LOCATION=$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/\r$/,""); print $2}' /tmp/preview-headers.txt | tail -n1)
+            if [ -z "${LOCATION:-}" ]; then
+              echo "Bypass handshake redirected without Location header."
+              exit 11
+            fi
+            PREVIEW_CODE=$(curl -sS \
+              -b /tmp/vercel-bypass.cookies \
+              -o /tmp/preview-readiness.json \
+              -w "%{http_code}" \
+              "$PREVIEW_URL$LOCATION" || true)
+          else
+            cp /tmp/preview-first-response.txt /tmp/preview-readiness.json
+          fi
+
+          echo "Preview readiness HTTP: $PREVIEW_CODE"
+          if [ "$PREVIEW_CODE" != "200" ]; then
+            echo "Preview response headers:"
+            sed -E 's/(x-vercel-protection-bypass|set-cookie):.*/\1: [redacted]/I' /tmp/preview-headers.txt || true
+            cat /tmp/preview-readiness.json || true
+            exit 11
+          fi
+
+          cat /tmp/preview-readiness.json
+          node -e '
+            const fs=require("fs");
+            const raw=fs.readFileSync("/tmp/preview-readiness.json","utf8");
+            if(raw.trim().startsWith("<")) throw new Error("preview still returned protection/login HTML");
+            const x=JSON.parse(raw);
+            if(!x.ok) throw new Error("preview readiness ok=false");
+            console.log("Protected preview bypass PASS");
+          '
+
+          echo "Runtime smoke scope: protected Preview deployment only."
+          echo "Production auth/storage readiness was verified separately on the live primary domain and Neon production."

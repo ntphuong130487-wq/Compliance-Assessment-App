@@ -69,11 +69,35 @@ export default async function handler(req,res){
       : [];
 
     const raIds=ra.map(x=>x.id);
+    const requirementAssignments=raIds.length
+      ? await sql`
+          SELECT id::text,requirement_assessment_id::text AS "raId",user_id AS "userId",
+                 display_name AS "displayName",assignment_role AS "assignmentRole",
+                 assigned_by AS "assignedBy",assigned_at AS "assignedAt",status
+          FROM requirement_assessment_assignments
+          WHERE requirement_assessment_id::text = ANY(${raIds}) AND status='active'
+          ORDER BY assigned_at DESC
+        `
+      : [];
+    const requirementAssignmentLogs=raIds.length
+      ? await sql`
+          SELECT id::text,decision_type AS type,'RequirementAssessment'::text AS object,
+                 decided_at AS at,reason AS note,object_id::text AS "objectId",
+                 from_state AS "fromState",to_state AS "toState",decided_by AS "decidedBy",metadata
+          FROM decision_logs
+          WHERE object_type='RequirementAssessment' AND object_id::text = ANY(${raIds})
+          ORDER BY decided_at DESC
+          LIMIT 1000
+        `
+      : [];
+
     const findings=raIds.length
       ? await sql`
           SELECT id::text, requirement_assessment_id::text AS "raId",title,fact,criteria,gap,
                  root_cause AS "rootCause",risk_impact AS impact,severity,priority,status,
-                 recommendation AS rec,disposition,disposition_note AS "dispositionNote",
+                 recommendation AS rec,remediation_required AS "remediationRequired",
+                 remediation_requirement AS "remediationRequirement",
+                 disposition,disposition_note AS "dispositionNote",
                  finalized_by AS "finalizedBy",finalized_at AS "finalizedAt",created_at AS "createdAt"
           FROM findings WHERE requirement_assessment_id::text = ANY(${raIds})
           ORDER BY created_at DESC
@@ -92,7 +116,7 @@ export default async function handler(req,res){
 
     const actions=findingIds.length
       ? await sql`
-          SELECT id::text,finding_id::text AS "findingId",action_text AS text,owner,
+          SELECT id::text,finding_id::text AS "findingId",action_type AS "actionType",action_text AS text,owner,
                  owner_identity_id AS "ownerPersonaId",due_date AS due,status,progress,
                  closure_submitted_at AS "closureSubmittedAt",created_by AS "createdByPersonaId",
                  created_at AS "createdAt",verification_status AS "verificationStatus"
@@ -102,6 +126,29 @@ export default async function handler(req,res){
       : [];
 
     const actionIds=actions.map(x=>x.id);
+    const actionChangeRequests=actionIds.length
+      ? await sql`
+          SELECT id::text,action_id::text AS "actionId",request_type AS "requestType",
+                 current_due_date AS "currentDueDate",requested_due_date AS "requestedDueDate",
+                 reason,requested_by AS "requestedBy",requested_at AS "requestedAt",
+                 status,decided_by AS "decidedBy",decided_at AS "decidedAt",decision_note AS "decisionNote"
+          FROM remediation_action_change_requests
+          WHERE action_id::text = ANY(${actionIds})
+          ORDER BY requested_at DESC
+        `
+      : [];
+    const actionLogs=actionIds.length
+      ? await sql`
+          SELECT id::text,decision_type AS type,'RemediationAction'::text AS object,
+                 decided_at AS at,reason AS note,object_id::text AS "objectId",
+                 from_state AS "fromState",to_state AS "toState",decided_by AS "decidedBy",metadata
+          FROM decision_logs
+          WHERE object_type='RemediationAction' AND object_id::text = ANY(${actionIds})
+          ORDER BY decided_at DESC
+          LIMIT 1000
+        `
+      : [];
+
     const verifications=actionIds.length
       ? await sql`
           SELECT id::text,action_id::text AS "actionId",verifier AS "verifierPersonaId",
@@ -152,8 +199,25 @@ export default async function handler(req,res){
           SELECT id::text,source_id::text AS "sourceId",source_clause AS "sourceClause",original_text AS "originalText",
                  obligation,applicability,obligation_type AS "obligationType",mandatory_level AS "mandatoryLevel",
                  expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure",
-                 review_status AS "reviewStatus",reviewed_by AS "reviewedBy",reviewed_at AS "reviewedAt"
+                 review_status AS "reviewStatus",reviewed_by AS "reviewedBy",reviewed_at AS "reviewedAt",
+                 ai_generated AS "aiGenerated",ai_confidence AS "aiConfidence",ai_engine AS "aiEngine",
+                 ai_schema_version AS "aiSchemaVersion",ai_field_confidence AS "fieldConfidence",
+                 ai_review_reasons AS "aiReviewReasons",ai_uncertainties AS uncertainties
           FROM draft_requirements ORDER BY created_at DESC
+        `
+      : [];
+
+    const draftIds=draftRequirements.map(x=>x.id);
+    const draftReviewEvents=draftIds.length
+      ? await sql`
+          SELECT d.id::text,d.object_id::text AS "objectId",d.decision_type AS "decisionType",
+                 d.from_state AS "fromState",d.to_state AS "toState",d.reason,d.decided_by AS "decidedBy",
+                 d.decided_at AS "decidedAt",to_jsonb(d)->'metadata' AS metadata,
+                 to_jsonb(d)->>'source' AS source
+          FROM decision_logs d
+          WHERE d.object_type='DraftRequirement' AND d.object_id::text = ANY(${draftIds})
+          ORDER BY d.decided_at DESC
+          LIMIT 500
         `
       : [];
 
@@ -192,6 +256,18 @@ export default async function handler(req,res){
         `
       : [];
 
+    const assessmentLogs=assessmentIds.length
+      ? await sql`
+          SELECT id::text,decision_type AS type,'Assessment'::text AS object,
+                 decided_at AS at,reason AS note,object_id::text AS "objectId",
+                 from_state AS "fromState",to_state AS "toState",decided_by AS "decidedBy",metadata
+          FROM decision_logs
+          WHERE object_type='ComplianceAssessment' AND object_id::text = ANY(${assessmentIds})
+          ORDER BY decided_at DESC
+          LIMIT 500
+        `
+      : [];
+
     const notifications=await sql`
       SELECT n.id,n.notification_type AS type,n.severity AS level,n.object_type AS "objectType",
              n.object_id AS "objectId",n.title,n.message AS text,n.created_at AS "createdAt",
@@ -207,9 +283,9 @@ export default async function handler(req,res){
       ok:true,mode:"normalized",user,
       state:{
         meta:{demo:false,version:"1.0",dataMode:"normalized"},
-        org,frameworks,requirements,sources,draftRequirements,assessments,ra,
-        evidence,revisions,links:evidenceLinks,proposals,findings,responses,actions,verifications,
-        notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:[]
+        org,frameworks,requirements,sources,draftRequirements,draftReviewEvents,assessments,ra,requirementAssignments,
+        evidence,revisions,links:evidenceLinks,proposals,findings,responses,actions,actionChangeRequests,verifications,
+        notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:[...assessmentLogs,...requirementAssignmentLogs,...actionLogs].sort((a,b)=>new Date(b.at)-new Date(a.at))
       }
     });
   }catch(error){

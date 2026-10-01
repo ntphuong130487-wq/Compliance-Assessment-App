@@ -5,14 +5,28 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AgriS – Đánh giá tuân thủ</title>
 <link rel="stylesheet" href="/src/styles/app.css">
+<link rel="stylesheet" href="/src/styles/product-v1.css">
 </head>
 <body>
 <div id="root"></div>
 <input id="files" type="file" multiple hidden>
-<input id="sourceFile" type="file" hidden accept=".txt,.md,.csv,.json,.xml,.html,.htm,.pdf,.docx">
+<input id="sourceFile" type="file" hidden accept=".txt,.md,.csv,.json,.xml,.html,.htm,.pdf,.docx,.png,.jpg,.jpeg,.webp,.tif,.tiff">
 <input id="actionEvidence" type="file" multiple hidden>
 <script src="/access-control.js"></script>
 <script src="/src/demo-data.js"></script>
+<script src="/src/ui/product-ui.js"></script>
+<script src="/src/ui/view-models.js"></script>
+<script src="/src/screens/shared.js"></script>
+<script src="/src/screens/dashboard.js"></script>
+<script src="/src/screens/frameworks.js"></script>
+<script src="/src/screens/assessments.js"></script>
+<script src="/src/screens/fieldwork.js"></script>
+<script src="/src/screens/findings.js"></script>
+<script src="/src/screens/actions.js"></script>
+<script src="/src/screens/reports.js"></script>
+<script src="/src/screens/settings.js"></script>
+<script src="/src/workflows/action-governance.js"></script>
+<script src="/src/workflows/assessment-assignment.js"></script>
 <script src="/src/app.js"></script>
 </body>
 </html>

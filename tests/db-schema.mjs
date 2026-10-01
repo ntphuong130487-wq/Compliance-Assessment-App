@@ -2,6 +2,11 @@ import fs from "node:fs";
 const schema=fs.readFileSync("db/schema.sql","utf8");
 const migration=fs.readFileSync("db/migrations/002_p2_operational.sql","utf8");
 const clerkMigration=fs.readFileSync("db/migrations/003_clerk_neon_auth.sql","utf8");
+const aiMigration=fs.readFileSync("db/migrations/005_ai_obligation_intelligence.sql","utf8");
+const auditMigration=fs.readFileSync("db/migrations/006_ai_review_audit.sql","utf8");
+const remediationMigration=fs.readFileSync("db/migrations/007_finding_remediation_model.sql","utf8");
+const actionGovernanceMigration=fs.readFileSync("db/migrations/008_action_change_governance.sql","utf8");
+const assignmentMigration=fs.readFileSync("db/migrations/009_requirement_assessor_assignment.sql","utf8");
 function assert(ok,msg){if(!ok)throw new Error(msg)}
 for(const name of ["app_users","user_org_scopes","notifications","user_notification_reads"]){
   assert(schema.includes("CREATE TABLE IF NOT EXISTS "+name),"Canonical schema missing "+name);
@@ -11,4 +16,29 @@ for(const col of ["issuer","issue_date","applicability","obligation_type","appro
   assert((schema+migration).includes(col),"Missing P2 field "+col);
 }
 assert(clerkMigration.includes("public_metadata")&&clerkMigration.includes("identity_provider"),"Clerk migration incomplete");
-console.log("PASS - normalized P2 + Clerk database schema readiness");
+for(const col of ["ai_generated","ai_confidence","ai_engine","ai_schema_version","ai_field_confidence","ai_review_reasons","ai_uncertainties","ai_payload"]){
+  assert(schema.includes(col),"Canonical schema missing AI field "+col);
+  assert(aiMigration.includes(col),"AI migration missing "+col);
+}
+assert(aiMigration.includes("chk_draft_requirements_ai_confidence"),"AI confidence constraint missing");
+for(const col of ["metadata","source"]){
+  assert(schema.includes(col),"Canonical decision log missing "+col);
+  assert(auditMigration.includes(col),"AI review audit migration missing "+col);
+}
+assert(auditMigration.includes("idx_decision_draft_review"),"AI review audit index missing");
+for(const col of ["remediation_required","remediation_requirement","action_type"]){
+  assert(schema.includes(col),"Canonical schema missing remediation field "+col);
+  assert(remediationMigration.includes(col),"Remediation migration missing "+col);
+}
+assert(remediationMigration.includes("mandatory_remediation")&&remediationMigration.includes("improvement_action"),
+  "Remediation action taxonomy missing");
+assert(remediationMigration.includes("chk_remediation_action_type"),"Remediation action type constraint missing");
+assert(schema.includes("remediation_action_change_requests"),"Canonical schema missing action change request table");
+assert(actionGovernanceMigration.includes("remediation_action_change_requests"),"Action governance migration missing request table");
+assert(actionGovernanceMigration.includes("ux_action_pending_due_change"),"Pending due-date request uniqueness control missing");
+assert(actionGovernanceMigration.includes("chk_action_change_request_status"),"Action change request status constraint missing");
+assert(schema.includes("requirement_assessment_assignments"),"Canonical schema missing requirement assignment table");
+assert(assignmentMigration.includes("requirement_assessment_assignments"),"Requirement assignment migration missing table");
+assert(assignmentMigration.includes("ux_ra_primary_assessor"),"Primary assessor uniqueness control missing");
+assert(assignmentMigration.includes("chk_ra_assignment_role"),"Requirement assignment role constraint missing");
+console.log("PASS - normalized schema + Clerk + AI obligation metadata + human-review audit readiness");

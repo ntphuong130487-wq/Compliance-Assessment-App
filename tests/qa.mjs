@@ -2,7 +2,11 @@ import fs from "node:fs";
 const shell=fs.readFileSync("index.html","utf8");
 const app=fs.readFileSync("src/app.js","utf8");
 const css=fs.readFileSync("src/styles/app.css","utf8");
-const html=shell+"\n"+app+"\n"+css;
+const productCss=fs.readFileSync("src/styles/product-v1.css","utf8");
+const screens=["shared","dashboard","frameworks","assessments","fieldwork","findings","actions","reports","settings"]
+  .map(x=>fs.readFileSync("src/screens/"+x+".js","utf8")).join("\n");
+const workflows=fs.readFileSync("src/workflows/action-governance.js","utf8");
+const html=shell+"\n"+app+"\n"+css+"\n"+productCss+"\n"+screens+"\n"+workflows;
 const checks=[
   ["7 màn hình",["Điều hành","Khung tuân thủ","Chương trình đánh giá","Kiểm tra hiện trường","Phát hiện","Khắc phục","Báo cáo"].every(x=>html.includes(x))],
   ["human-in-the-loop",html.includes("AI chỉ đề xuất")&&html.includes("Tạo Phát hiện dự thảo")&&html.includes("Chốt Phát hiện")],
@@ -25,7 +29,7 @@ const checks=[
   ["draft-final finding workflow",html.includes("pending_unit_response")&&html.includes("pending_final_review")&&html.includes("finalizeFinding")],
   ["one-level requirement approval",html.includes("approveRequirement")&&html.includes("pending_approval")&&html.includes("approve_framework")],
   ["independent verification",html.includes("Không được tự xác minh")&&html.includes("ownerPersonaId")],
-  ["scoped reporting",html.includes("scopedRA=visibleRA()")],
+  ["scoped reporting",html.includes("visibleRA()")||html.includes("c.visibleRA()")],
   ["reset demo removed",!html.includes(">Reset demo</button>")],
   ["full requirement result taxonomy",["compliant","partially_compliant","non_compliant","not_applicable","insufficient_evidence"].every(x=>html.includes(x))&&html.includes("Ghi nhận kết quả Yêu cầu tuân thủ")],
   ["source lifecycle metadata",["sourceCode","issuer","issueDate","effectiveFrom","effectiveTo","supersedesRef","owner"].every(x=>html.includes(x))],

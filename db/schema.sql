@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS decision_logs (
   id uuid PRIMARY KEY, object_type text NOT NULL, object_id uuid NOT NULL,
   decision_type text NOT NULL, from_state text, to_state text,
   reason text, decided_by text, decided_at timestamptz NOT NULL DEFAULT now(),
-  approval_ref text
+  approval_ref text, metadata jsonb, source text
 );
 
 CREATE INDEX IF NOT EXISTS idx_ra_assessment ON requirement_assessments(assessment_id);
@@ -266,6 +266,14 @@ CREATE TABLE IF NOT EXISTS draft_requirements (
   expected_evidence text,
   test_procedure text,
   review_status text NOT NULL DEFAULT 'draft',
+  ai_generated boolean NOT NULL DEFAULT false,
+  ai_confidence numeric(5,4),
+  ai_engine text,
+  ai_schema_version text,
+  ai_field_confidence jsonb,
+  ai_review_reasons jsonb,
+  ai_uncertainties jsonb,
+  ai_payload jsonb,
   reviewed_by text,
   reviewed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -303,3 +311,145 @@ CREATE INDEX IF NOT EXISTS idx_draft_requirements_source_status ON draft_require
 CREATE INDEX IF NOT EXISTS idx_unit_responses_finding ON unit_responses(finding_id);
 CREATE INDEX IF NOT EXISTS idx_evidence_org ON evidence(org_unit_id);
 
+
+
+-- AI Obligation Intelligence v1
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='chk_draft_requirements_ai_confidence'
+  ) THEN
+    ALTER TABLE draft_requirements
+      ADD CONSTRAINT chk_draft_requirements_ai_confidence
+      CHECK (ai_confidence IS NULL OR (ai_confidence >= 0 AND ai_confidence <= 1));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_draft_requirements_ai_confidence
+  ON draft_requirements(ai_confidence)
+  WHERE ai_generated=true;
+CREATE INDEX IF NOT EXISTS idx_draft_requirements_ai_review
+  ON draft_requirements(review_status, ai_generated, ai_confidence);
+
+
+-- Human review audit trail for draft obligations
+ALTER TABLE decision_logs
+  ADD COLUMN IF NOT EXISTS metadata jsonb,
+  ADD COLUMN IF NOT EXISTS source text;
+CREATE INDEX IF NOT EXISTS idx_decision_draft_review
+  ON decision_logs(object_type, object_id, decided_at DESC)
+  WHERE object_type='DraftRequirement';
+
+
+-- Finding remediation model v1
+ALTER TABLE findings
+  ADD COLUMN IF NOT EXISTS remediation_required boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS remediation_requirement text;
+
+ALTER TABLE remediation_actions
+  ADD COLUMN IF NOT EXISTS action_type text NOT NULL DEFAULT 'mandatory_remediation';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='chk_remediation_action_type'
+  ) THEN
+    ALTER TABLE remediation_actions
+      ADD CONSTRAINT chk_remediation_action_type
+      CHECK (action_type IN ('mandatory_remediation','improvement_action'));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_findings_remediation_required
+  ON findings(remediation_required,status)
+  WHERE remediation_required=true;
+
+CREATE INDEX IF NOT EXISTS idx_actions_type_status
+  ON remediation_actions(action_type,status);
+
+
+-- Remediation action governance v1
+CREATE TABLE IF NOT EXISTS remediation_action_change_requests (
+  id uuid PRIMARY KEY,
+  action_id uuid NOT NULL REFERENCES remediation_actions(id) ON DELETE CASCADE,
+  request_type text NOT NULL DEFAULT 'due_date_change',
+  current_due_date date,
+  requested_due_date date NOT NULL,
+  reason text NOT NULL,
+  requested_by text NOT NULL,
+  requested_at timestamptz NOT NULL DEFAULT now(),
+  status text NOT NULL DEFAULT 'pending',
+  decided_by text,
+  decided_at timestamptz,
+  decision_note text
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='chk_action_change_request_type'
+  ) THEN
+    ALTER TABLE remediation_action_change_requests
+      ADD CONSTRAINT chk_action_change_request_type
+      CHECK (request_type IN ('due_date_change'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='chk_action_change_request_status'
+  ) THEN
+    ALTER TABLE remediation_action_change_requests
+      ADD CONSTRAINT chk_action_change_request_status
+      CHECK (status IN ('pending','approved','rejected','cancelled'));
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_action_pending_due_change
+  ON remediation_action_change_requests(action_id)
+  WHERE request_type='due_date_change' AND status='pending';
+
+CREATE INDEX IF NOT EXISTS idx_action_change_requests_status
+  ON remediation_action_change_requests(status,requested_at DESC);
+
+
+-- Requirement-level assessor assignment v1
+CREATE TABLE IF NOT EXISTS requirement_assessment_assignments (
+  id uuid PRIMARY KEY,
+  requirement_assessment_id uuid NOT NULL REFERENCES requirement_assessments(id) ON DELETE CASCADE,
+  user_id text NOT NULL REFERENCES app_users(id) ON DELETE RESTRICT,
+  display_name text,
+  assignment_role text NOT NULL DEFAULT 'primary_assessor',
+  assigned_by text NOT NULL,
+  assigned_at timestamptz NOT NULL DEFAULT now(),
+  status text NOT NULL DEFAULT 'active'
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='chk_ra_assignment_role'
+  ) THEN
+    ALTER TABLE requirement_assessment_assignments
+      ADD CONSTRAINT chk_ra_assignment_role
+      CHECK (assignment_role IN ('primary_assessor','support_assessor'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname='chk_ra_assignment_status'
+  ) THEN
+    ALTER TABLE requirement_assessment_assignments
+      ADD CONSTRAINT chk_ra_assignment_status
+      CHECK (status IN ('active','inactive'));
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ra_primary_assessor
+  ON requirement_assessment_assignments(requirement_assessment_id)
+  WHERE assignment_role='primary_assessor' AND status='active';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ra_user_active_assignment
+  ON requirement_assessment_assignments(requirement_assessment_id,user_id,assignment_role)
+  WHERE status='active';
+
+CREATE INDEX IF NOT EXISTS idx_ra_assignments_user
+  ON requirement_assessment_assignments(user_id,status);
+
+CREATE INDEX IF NOT EXISTS idx_ra_assignments_ra
+  ON requirement_assessment_assignments(requirement_assessment_id,status);

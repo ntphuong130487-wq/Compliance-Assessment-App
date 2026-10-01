@@ -5,15 +5,15 @@
   var roles={
     compliance_admin:{
       label:"Quản trị Tuân thủ",
-      permissions:["view_dashboard","manage_framework","approve_framework","manage_assessment","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports","administer_access"]
+      permissions:["view_dashboard","manage_framework","approve_framework","manage_assessment","assign_assessment_work","conduct_fieldwork","review_assessment","review_ai","confirm_finding","assign_action","approve_action_change","verify_action","view_reports","administer_access"]
     },
     compliance_manager:{
       label:"Quản lý Tuân thủ",
-      permissions:["view_dashboard","manage_framework","approve_framework","manage_assessment","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports"]
+      permissions:["view_dashboard","manage_framework","approve_framework","manage_assessment","assign_assessment_work","conduct_fieldwork","review_assessment","review_ai","confirm_finding","assign_action","approve_action_change","verify_action","view_reports"]
     },
     lead_assessor:{
       label:"Trưởng đoàn đánh giá",
-      permissions:["view_dashboard","conduct_fieldwork","review_ai","confirm_finding","assign_action","verify_action","view_reports"]
+      permissions:["view_dashboard","assign_assessment_work","conduct_fieldwork","review_ai","confirm_finding","assign_action","approve_action_change","verify_action","view_reports"]
     },
     assessor:{
       label:"Người kiểm tra",
@@ -21,7 +21,7 @@
     },
     reviewer:{
       label:"Người rà soát",
-      permissions:["view_dashboard","review_ai","confirm_finding","verify_action","view_reports"]
+      permissions:["view_dashboard","review_assessment","review_ai","confirm_finding","verify_action","view_reports"]
     },
     unit_owner:{
       label:"Đơn vị được đánh giá",

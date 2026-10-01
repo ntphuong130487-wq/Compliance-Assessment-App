@@ -1,0 +1,54 @@
+import fs from "node:fs";
+
+function assert(ok,msg){if(!ok)throw new Error(msg)}
+const src=fs.readFileSync("api/evidence.js","utf8");
+
+for(const term of [
+  "revisionContext","assertOrgScope(session,ctx.orgId)","contentDisposition","SAFE_INLINE_TYPES",
+  "Content-Security-Policy","Referrer-Policy",
+  "BLOB_NOT_CONFIGURED","AUTH_REQUIRED","USER_NOT_PROVISIONED",
+  "EVIDENCE_SCOPE_UNRESOLVED","EVIDENCE_BLOB_NOT_FOUND",
+  "NORMALIZED_TARGET_REQUIRED","TARGET_NOT_FOUND",
+  "REQUIREMENT_NOT_ASSIGNED_TO_USER","assign_assessment_work"
+]) assert(src.includes(term),"Evidence security control missing: "+term);
+
+const uploadStart=src.indexOf('if(req.method!=="POST")');
+const authPos=src.indexOf("const session=await userContext(req)",uploadStart);
+const scopePos=src.indexOf("assertOrgScope(session,ctx.orgId)",authPos);
+const bodyPos=src.indexOf("const body=await readBody(req)",uploadStart);
+const putPos=src.indexOf("await put(pathname,body",uploadStart);
+assert(uploadStart>=0&&authPos>uploadStart,"Upload auth path missing");
+assert(scopePos>authPos&&scopePos<bodyPos,"Org-scope authorization must occur before reading upload body");
+assert(bodyPos<putPos,"Blob put must occur only after body-size enforcement");
+
+const txPos=src.indexOf("await sql.transaction([",putPos);
+const evidenceInsert=src.indexOf("INSERT INTO evidence(",txPos);
+const revisionInsert=src.indexOf("INSERT INTO evidence_revisions",txPos);
+const linkInsert=src.indexOf("INSERT INTO evidence_links",txPos);
+assert(txPos>putPos&&evidenceInsert>txPos&&revisionInsert>evidenceInsert&&linkInsert>revisionInsert,
+  "Evidence metadata/revision/link must be persisted atomically after Blob write");
+assert(src.includes("await del(blob.url"),"Blob cleanup on DB transaction failure is required");
+
+const readStart=src.indexOf('if(req.method==="GET")');
+const readAuth=src.indexOf("const session=await userContext(req)",readStart);
+const streamCall=src.indexOf("streamEvidence(req,res,session)",readAuth);
+assert(readAuth>readStart&&streamCall>readAuth,
+  "GET evidence route must authenticate before entering private stream handler");
+const streamStart=src.indexOf("async function streamEvidence");
+const streamScope=src.indexOf("assertOrgScope(session,ctx.orgId)",streamStart);
+const getBlob=src.indexOf("await get(pathname",streamScope);
+assert(streamScope>streamStart&&getBlob>streamScope,
+  "Private stream handler must enforce org scope before Blob read");
+
+console.log("PASS - evidence auth, org scope, atomicity and cleanup ordering");
+
+const inlinePolicy=src.indexOf("SAFE_INLINE_TYPES.has(normalizedType)");
+const disposition=src.indexOf('res.setHeader("Content-Disposition"',inlinePolicy);
+assert(inlinePolicy>=0&&disposition>inlinePolicy,
+  "Inline evidence must be restricted to explicit safe MIME types before response");
+assert(src.includes('"application/pdf"')&&src.includes('"image/png"')&&!src.includes('"image/svg+xml"'),
+  "Active document types must not be allowed inline");
+
+const assignmentCheck=src.indexOf("REQUIREMENT_NOT_ASSIGNED_TO_USER");
+assert(assignmentCheck>scopePos&&assignmentCheck<bodyPos,
+  "Requirement assignment must be enforced before reading evidence upload body");

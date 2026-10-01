@@ -1,0 +1,36 @@
+{
+  "version": "v1",
+  "purpose": "Regression fixtures for document text-layer extraction and OCR routing.",
+  "expectedText": "Don vi phai luu giu day du ho so va chung tu.",
+  "fixtures": [
+    {
+      "file": "text-obligation.pdf",
+      "kind": "pdf-text-layer",
+      "expect": "text-layer",
+      "ocrRequired": false
+    },
+    {
+      "file": "text-obligation.docx",
+      "kind": "docx-text-layer",
+      "expect": "text-layer",
+      "ocrRequired": false
+    },
+    {
+      "file": "scan-obligation.png",
+      "kind": "image-scan",
+      "expect": "ocr-required",
+      "ocrRequired": true
+    },
+    {
+      "file": "scan-obligation.pdf",
+      "kind": "image-only-pdf",
+      "expect": "ocr-required",
+      "ocrRequired": true
+    }
+  ],
+  "notes": [
+    "PDF and DOCX are deterministic text-layer regression fixtures.",
+    "Image and image-only PDF must route to OCR.",
+    "Unreadable PDFs are still designed to fail safe into OCR routing rather than crash intake."
+  ]
+}
