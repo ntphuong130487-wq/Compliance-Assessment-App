@@ -75,5 +75,6 @@
       "source": "/api/v1/users",
       "destination": "/api/users?route=directory"
     }
-  ]
+  ],
+  "buildCommand": "node scripts/configure-clerk-proxy.mjs"
 }
