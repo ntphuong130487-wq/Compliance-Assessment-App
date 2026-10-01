@@ -389,24 +389,58 @@ export default async function handler(req,res){
       const ctx=await assessmentContext(sql,p.assessmentId);
       if(!ctx)return res.status(404).json({ok:false,error:"ASSESSMENT_NOT_FOUND"});
       assertOrgScope(user,ctx.orgId);
-      if(ctx.lockedAt)return res.status(409).json({ok:false,error:"ASSESSMENT_SCOPE_LOCKED"});
+      if(ctx.lockedAt||ctx.status!=="draft")return res.status(409).json({ok:false,error:"ASSESSMENT_SCOPE_LOCKED"});
+
       const eligibility=await assessmentEligibility(sql,p.assessmentId);
-      const existing=await sql`SELECT requirement_id::text AS "requirementId" FROM requirement_assessments WHERE assessment_id=${p.assessmentId}::uuid`;
+      const eligibleSet=new Set(eligibility.eligible.map(x=>x.id));
+      const existing=await sql`
+        SELECT ra.id::text AS "raId",ra.requirement_id::text AS "requirementId",
+               ra.workflow_status AS "workflowStatus",ra.compliance_result AS "complianceResult",
+               EXISTS(SELECT 1 FROM findings f WHERE f.requirement_assessment_id=ra.id) AS "hasFinding",
+               EXISTS(SELECT 1 FROM evidence_links l WHERE l.target_type='RequirementAssessment' AND l.target_id=ra.id) AS "hasEvidence"
+        FROM requirement_assessments ra
+        WHERE ra.assessment_id=${p.assessmentId}::uuid
+      `;
       const existingSet=new Set(existing.map(x=>x.requirementId));
-      let added=0;
+      const ineligible=existing.filter(x=>!eligibleSet.has(x.requirementId));
+      const unsafe=ineligible.filter(x=>x.workflowStatus!=="to_do"||x.complianceResult!=="not_assessed"||x.hasFinding||x.hasEvidence);
+      if(unsafe.length){
+        return res.status(409).json({ok:false,error:"INELIGIBLE_REQUIREMENTS_HAVE_WORK",items:unsafe});
+      }
+
+      let added=0,removed=0;
+      const statements=[];
+      for(const x of ineligible){
+        statements.push(sql`DELETE FROM requirement_assessments WHERE id=${x.raId}::uuid`);
+        statements.push(sql`
+          INSERT INTO decision_logs(id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
+          VALUES(${crypto.randomUUID()}::uuid,'ComplianceAssessment',${p.assessmentId}::uuid,'remove_ineligible_requirement',
+                 'eligible','ineligible','Eligibility recalculated before fieldwork',${user.id},now(),
+                 ${JSON.stringify({requirementId:x.requirementId,requirementAssessmentId:x.raId})}::jsonb,'compliance-app')
+        `);
+        removed++;
+      }
       for(const r of eligibility.eligible){
         if(existingSet.has(r.id))continue;
-        await sql`
+        const raId=crypto.randomUUID();
+        statements.push(sql`
           INSERT INTO requirement_assessments
             (id,assessment_id,requirement_id,workflow_status,compliance_result,requirement_snapshot,scope_snapshot,eligibility_snapshot)
-          VALUES(${crypto.randomUUID()}::uuid,${p.assessmentId}::uuid,${r.id}::uuid,'to_do','not_assessed',
+          VALUES(${raId}::uuid,${p.assessmentId}::uuid,${r.id}::uuid,'to_do','not_assessed',
                  ${JSON.stringify(requirementSnapshot(r))}::jsonb,${JSON.stringify(eligibility.scope)}::jsonb,
                  ${JSON.stringify({approved:r.approved,unitMatch:r.unitMatch,processMatch:r.processMatch,activityMatch:r.activityMatch,sourceEffective:r.sourceEffective})}::jsonb)
-        `;
+        `);
+        statements.push(sql`
+          INSERT INTO decision_logs(id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
+          VALUES(${crypto.randomUUID()}::uuid,'ComplianceAssessment',${p.assessmentId}::uuid,'add_eligible_requirement',
+                 'not_attached','eligible','Eligibility recalculated before fieldwork',${user.id},now(),
+                 ${JSON.stringify({requirementId:r.id,requirementAssessmentId:raId})}::jsonb,'compliance-app')
+        `);
         added++;
       }
-      await recordAssessmentDecision(sql,user,p.assessmentId,"refresh_eligible_requirements",ctx.status,ctx.status,{eligibility:eligibility.counts,added});
-      return res.status(200).json({ok:true,added,eligibility:eligibility.counts});
+      if(statements.length)await sql.transaction(statements);
+      await recordAssessmentDecision(sql,user,p.assessmentId,"refresh_eligible_requirements",ctx.status,ctx.status,{eligibility:eligibility.counts,added,removed});
+      return res.status(200).json({ok:true,added,removed,eligibility:eligibility.counts});
     }
 
     if(command==="assessment.assignRequirements"){
