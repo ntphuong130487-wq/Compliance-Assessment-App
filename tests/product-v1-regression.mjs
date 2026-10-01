@@ -61,6 +61,7 @@ assert(screens.includes("Dữ liệu kiểm tra")&&screens.includes("không bóc
 assert(commands.includes("DRAFT_REVIEW_INCOMPLETE"),"Structured review completeness control missing");
 assert(commands.includes("DUPLICATE_DRAFT_OBLIGATION")&&commands.includes("DUPLICATE_OFFICIAL_REQUIREMENT"),"Obligation duplicate controls missing");
 assert(commands.includes("await sql.transaction(statements)"),"Obligation publish must be atomic");
+assert(commands.includes("INELIGIBLE_REQUIREMENTS_HAVE_WORK")&&commands.includes("remove_ineligible_requirement")&&commands.includes("add_eligible_requirement"),"Eligibility refresh synchronization controls missing");
 
 // End-to-end business lifecycle controls
 for(const control of [
