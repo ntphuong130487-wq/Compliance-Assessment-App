@@ -983,17 +983,38 @@ export default async function handler(req,res){
       `;
       if(drafts.length!==ids.length)return res.status(409).json({ok:false,error:"DRAFT_SET_NOT_ACCEPTED"});
 
+      const keys=drafts.map(d=>d.obligationKey).filter(Boolean);
+      const keySet=new Set(keys);
+      if(keySet.size!==keys.length){
+        return res.status(409).json({ok:false,error:"DUPLICATE_DRAFT_OBLIGATION"});
+      }
+      if(keys.length){
+        const existingDup=await sql`
+          SELECT id::text,code,obligation_key AS "obligationKey"
+          FROM compliance_requirements
+          WHERE obligation_key = ANY(${keys}) AND status<>'rejected'
+        `;
+        if(existingDup.length){
+          return res.status(409).json({ok:false,error:"DUPLICATE_OFFICIAL_REQUIREMENT",existing:existingDup});
+        }
+      }
+
       const prefix=fw?fw.code:"REQ";
       const existing=await sql`SELECT code FROM compliance_requirements WHERE code LIKE ${prefix+"-%"}`;
       let max=0;
       for(const row of existing){const m=String(row.code||"").match(/-(\d+)$/);if(m)max=Math.max(max,Number(m[1]));}
 
-      const created=[];
+      const statements=[],created=[];
       for(let i=0;i<drafts.length;i++){
         const d=drafts[i],rid=crypto.randomUUID(),code=prefix+"-"+String(max+i+1).padStart(3,"0");
-        const dup=d.obligationKey?await sql`SELECT id::text,code FROM compliance_requirements WHERE obligation_key=${d.obligationKey} AND status<>'rejected' LIMIT 1`:[];
-        if(dup.length)return res.status(409).json({ok:false,error:"DUPLICATE_OFFICIAL_REQUIREMENT",draftId:d.id,existing:dup[0]});
-        await sql`
+        const metadata={
+          aiGenerated:Boolean(d.aiGenerated),aiConfidence:d.aiConfidence==null?null:Number(d.aiConfidence),
+          aiEngine:d.aiEngine||null,aiSchemaVersion:d.aiSchemaVersion||null,
+          aiReviewReasons:Array.isArray(d.aiReviewReasons)?d.aiReviewReasons:[],
+          uncertainties:Array.isArray(d.uncertainties)?d.uncertainties:[],
+          requirementId:rid,code,frameworkId:fw?.id||null
+        };
+        statements.push(sql`
           INSERT INTO compliance_requirements
             (id,code,title,description,source_id,source_clause,assessable,mandatory_level,test_procedure,
              expected_evidence,applicability,obligation_type,status,origin_assessment_id,
@@ -1011,13 +1032,24 @@ export default async function handler(req,res){
              ${JSON.stringify(d.applicableOrgRefs||[])}::jsonb,${JSON.stringify(d.applicableProcessRefs||[])}::jsonb,
              ${JSON.stringify(d.applicableActivityRefs||[])}::jsonb,${JSON.stringify(d.applicableRoleRefs||[])}::jsonb,
              ${d.obligationKey||null},1,now())
-        `;
-        if(fw)await sql`INSERT INTO framework_requirements(framework_id,requirement_id) VALUES(${fw.id}::uuid,${rid}::uuid)`;
-        await sql`UPDATE draft_requirements SET review_status='published',reviewed_by=${user.id},reviewed_at=now(),updated_at=now() WHERE id=${d.id}::uuid`;
-        await recordDraftDecision(sql,user,d,"publish_reviewed_obligation","accepted","published",p.reviewNote||null,{requirementId:rid,code,frameworkId:fw?.id||null});
+        `);
+        if(fw)statements.push(sql`INSERT INTO framework_requirements(framework_id,requirement_id) VALUES(${fw.id}::uuid,${rid}::uuid)`);
+        statements.push(sql`
+          UPDATE draft_requirements
+          SET review_status='published',reviewed_by=${user.id},reviewed_at=now(),updated_at=now()
+          WHERE id=${d.id}::uuid AND review_status='accepted'
+        `);
+        statements.push(sql`
+          INSERT INTO decision_logs
+            (id,object_type,object_id,decision_type,from_state,to_state,reason,decided_by,decided_at,metadata,source)
+          VALUES
+            (${crypto.randomUUID()}::uuid,'DraftRequirement',${d.id}::uuid,'publish_reviewed_obligation',
+             'accepted','published',${p.reviewNote||null},${user.id},now(),${JSON.stringify(metadata)}::jsonb,'compliance-app')
+        `);
         created.push({id:rid,code});
       }
-      if(fw)await sql`UPDATE compliance_frameworks SET status='pending_approval',updated_at=now() WHERE id=${fw.id}::uuid`;
+      if(fw)statements.push(sql`UPDATE compliance_frameworks SET status='pending_approval',updated_at=now() WHERE id=${fw.id}::uuid`);
+      await sql.transaction(statements);
       return res.status(201).json({ok:true,created,count:created.length,status:"pending_approval",frameworkId:fw?.id||null});
     }
 
