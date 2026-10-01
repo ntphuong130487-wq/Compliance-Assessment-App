@@ -37,7 +37,14 @@ Target: `main`
 - [x] `AUTH_MODE=clerk`
 - [x] Clerk production keys configured
 - [x] Vercel Blob store connected
-- [ ] Production readiness endpoint checked after final merge candidate deployment
+- [x] Production environment readiness endpoint checked via Vercel runtime smoke
+  - Production alias: `compliance-assessment-app-ashen.vercel.app`
+  - HTTP 200; `productionReady=true`; `missing=[]`
+  - Clerk configured; normalized DB ready; production core ready; Vercel Blob configured via OIDC
+- [x] Latest feature branch deployed successfully to Vercel Preview
+  - Latest commit: `0d953cd0d8239bcef35ca7404a55ab8a176ad2db`
+  - Vercel status: SUCCESS
+  - Preview is intentionally behind Vercel Deployment Protection; unauthenticated smoke cannot inspect app readiness there
 - [ ] Private Blob upload/read smoke test with authenticated production user
 
 ## Gate D — Database
