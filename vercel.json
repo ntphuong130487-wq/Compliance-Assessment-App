@@ -44,6 +44,10 @@
   ],
   "rewrites": [
     {
+      "source": "/smoke/private-blob",
+      "destination": "/api/smoke"
+    },
+    {
       "source": "/__clerk/:path*",
       "destination": "/api/clerk-proxy?path=:path*"
     },
