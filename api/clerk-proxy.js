@@ -41,7 +41,9 @@ export default async function handler(req,res){
   headers.set("Clerk-Secret-Key",process.env.CLERK_SECRET_KEY);
   headers.set("X-Forwarded-For",firstIp(req));
 
-  const init={method:req.method,headers,redirect:"manual"};
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  const init={method:req.method,headers,redirect:"manual",signal:controller.signal};
   if(!["GET","HEAD"].includes(req.method||"GET"))init.body=await readBody(req);
 
   try{
@@ -62,8 +64,10 @@ export default async function handler(req,res){
       res.setHeader(key,value);
     });
     const ab=await upstream.arrayBuffer();
+    clearTimeout(timeout);
     return res.end(Buffer.from(ab));
   }catch(error){
+    clearTimeout(timeout);
     console.error("Clerk frontend proxy error",error);
     return res.status(502).json({ok:false,error:"CLERK_PROXY_UPSTREAM_ERROR"});
   }
