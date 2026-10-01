@@ -98,7 +98,7 @@ jobs:
           node-version: 22
       - name: Install Playwright
         run: |
-          npm install --ignore-scripts --no-audit --no-fund
+          npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.55.0
           npx playwright install --with-deps chromium
       - name: Verify Clerk sign-in UI opens in production
         env:
