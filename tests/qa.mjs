@@ -21,7 +21,7 @@ const checks=[
   ["evidence storage client",html.includes("/api/evidence")&&html.includes("blob-private")],
   ["org-scoped visibility",html.includes("visibleAssessments")&&html.includes("visibleFindings")],
   ["unit response workflow",html.includes("data-respond")&&html.includes("Phản hồi phát hiện")&&html.includes("responses")],
-  ["AgriS branding",html.includes("data:image/png;base64")&&html.includes("--green-dark")&&html.includes("Nguồn & Khung tuân thủ")],
+  ["R&C branding",html.includes("/assets/rc-logo-inverse.svg")&&html.includes("R&C Risk & Compliance")&&html.includes("--green-dark")&&html.includes("Nguồn & Khung tuân thủ")],
   ["source intake modes",html.includes("Upload file")&&html.includes("Nhập / dán text")&&html.includes("Tìm quy định nhà nước")],
   ["draft obligation review",html.includes("Rà soát nghĩa vụ dự thảo")&&html.includes("data-draft-accept")&&html.includes("publishDrafts")],
   ["source traceability",html.includes("sourceClause")&&html.includes("sourceId")&&html.includes("Nguồn/Điều khoản")],
