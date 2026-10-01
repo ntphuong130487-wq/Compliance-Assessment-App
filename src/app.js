@@ -266,27 +266,37 @@ function dashboard(){return shell("Điều hành",Screens.dashboard(screenContex
 function sourceStatusLabel(s){
 return({draft:"Nháp",extracted:"Đã bóc tách",pending_approval:"Chờ duyệt",published:"Đã hiệu lực",search_not_configured:"Chưa kết nối nguồn search",needs_ocr:"Cần OCR/AI",error:"Lỗi"})[s]||s;
 }
-function localExtract(text,sourceId){
+function localExtract(text,sourceId,assessmentId){
 var keys=["phải","không được","có trách nhiệm","chịu trách nhiệm","chỉ được","bắt buộc","thực hiện","bảo đảm","đảm bảo","lưu giữ","lưu trữ","báo cáo","phê duyệt","tuân thủ","cấm","đăng ký","thông báo"];
 var parts=String(text||"").replace(/\r/g,"\n").split(/\n+|(?<=[.;!?])\s+/).map(function(x){return x.trim()}).filter(Boolean);
 var cand=parts.filter(function(s){var x=s.toLowerCase();return s.length>=18&&keys.some(function(k){return x.indexOf(k)>=0})});
 if(!cand.length)cand=parts.filter(function(s){return s.length>=40}).slice(0,30);
 return cand.slice(0,60).map(function(s){
   var x=s.toLowerCase(),type=/không được|cấm/.test(x)?"prohibition":/phê duyệt|chấp thuận/.test(x)?"approval":/lưu giữ|lưu trữ|hồ sơ|chứng từ/.test(x)?"record":/báo cáo|thông báo/.test(x)?"reporting":/đăng ký|giấy phép|điều kiện/.test(x)?"condition":/trách nhiệm/.test(x)?"responsibility":"general";
-  return{id:id("dr"),sourceId:sourceId,sourceClause:"",originalText:s,obligation:s,applicability:"",obligationType:type,mandatoryLevel:/nếu|trường hợp|khi /.test(x)?"conditional":/phải|không được|cấm|bắt buộc|chỉ được/.test(x)?"mandatory":"review",expectedEvidence:"Hồ sơ, dữ liệu hệ thống, chứng từ hoặc bằng chứng thực tế phù hợp.",testProcedure:"Đối chiếu bằng chứng thực tế với yêu cầu và phạm vi áp dụng của nghĩa vụ.",reviewStatus:"draft"};
+  var actor=(s.match(/^(.{2,120}?)(?=\s+(?:phải|không được|có trách nhiệm|chịu trách nhiệm|chỉ được|bắt buộc)\b)/i)||[])[1]||"";
+  var action=(s.match(/\b(?:phải|không được|có trách nhiệm|chịu trách nhiệm|chỉ được|bắt buộc)\s+(.+)/i)||[])[1]||"";
+  var clause=(s.match(/\b(?:Điều|Khoản|Mục|Điểm)\s+[\w.\-]+/i)||[])[0]||"";
+  return{id:id("dr"),sourceId:sourceId,originAssessmentId:assessmentId||null,sourceClause:clause,originalText:s,obligation:s,
+    actorText:actor,actionText:action,objectText:"",conditionText:/\bnếu\b|trường hợp|\bkhi\b/i.test(x)?s:"",
+    exceptionText:/ngoại trừ|trừ trường hợp|trừ khi|không áp dụng/i.test(x)?s:"",timingText:"",frequencyText:"",
+    applicability:"",applicableOrgRefs:[],applicableProcessRefs:[],applicableActivityRefs:[],applicableRoleRefs:[],
+    controlPoint:"",controlObjective:"",obligationType:type,mandatoryLevel:/nếu|trường hợp|khi /.test(x)?"conditional":/phải|không được|cấm|bắt buộc|chỉ được/.test(x)?"mandatory":"review",
+    expectedEvidence:"",testProcedure:"",verificationMethod:"",reviewReasons:["Rule fallback — cần người rà soát hoàn thiện trước khi chấp nhận"],reviewStatus:"draft"};
 });
 }
-async function extractTextSource(src,text){
+async function extractTextSource(src,text,assessmentId){
 var drafts=[];
 try{
-  var res=await fetch("/api/obligations/extract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text,sourceId:src.id})});
+  var res=await fetch("/api/obligations/extract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text,sourceId:src.id,assessmentId:assessmentId})});
   var data=await res.json();
   if(res.ok&&data.ok){
     if(syncMode==="normalized"){await pullRemote();render();return}
     drafts=(data.obligations||[]).map(function(d){d.id=id("dr");return d});
+  }else if(syncMode==="normalized"){
+    alert("Không bóc tách được nghĩa vụ: "+(data.error||"EXTRACTION_FAILED"));return;
   }
 }catch(e){if(syncMode==="normalized"){alert("Không bóc tách được nghĩa vụ: "+e.message);return}}
-if(!drafts.length)drafts=localExtract(text,src.id);
+if(!drafts.length)drafts=localExtract(text,src.id,assessmentId);
 S.draftRequirements=S.draftRequirements.concat(drafts);
 src.status="extracted";src.extractedCount=drafts.length;src.updatedAt=now();save();render();
 }
@@ -305,12 +315,34 @@ function applySourceMeta(src,d){
 }
 function addTextSource(){
 if(!guard("manage_framework"))return;
-modal('<h3>Nhập nội dung nguồn tuân thủ</h3><form id="srcTextForm"><div class="field"><label>Tên nguồn</label><input name="title" required placeholder="Ví dụ: Quy chế/Quy trình/Văn bản..."></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option><option>Hợp đồng/Cam kết</option></select></div>'+sourceMetaFields({})+'<div class="field"><label>Nội dung</label><textarea name="text" required style="min-height:220px" placeholder="Dán nội dung cần bóc tách nghĩa vụ..."></textarea></div><button class="btn">Bóc tách nghĩa vụ</button></form>');
-document.getElementById("srcTextForm").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));if(syncMode==="normalized"){try{var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,supersedesRef:d.supersedesRef||""});document.getElementById("mb")?.remove();var src={id:out.record.id,title:d.title};await extractTextSource(src,d.text)}catch(e){alert("Không tạo được nguồn: "+e.message)}return}var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"text",status:"draft",createdAt:now(),excerpt:d.text.slice(0,1000)};applySourceMeta(src,d);S.sources.unshift(src);document.getElementById("mb").remove();extractTextSource(src,d.text)}
+if(!S.assessments.length){modal('<h3>Chưa có phạm vi đánh giá</h3><p>Hãy tạo cuộc đánh giá và xác định Đơn vị + Quy trình + Hoạt động + Địa điểm trước khi tiếp nhận nguồn.</p>');return}
+modal('<h3>Nhập nguồn cho cuộc đánh giá</h3><form id="srcTextForm">'+assessmentSourceContextFields()+'<div class="field"><label>Tên nguồn</label><input name="title" required placeholder="Ví dụ: Luật, quy chế, chính sách, quy trình..."></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option><option>Hợp đồng/Cam kết</option><option>JD/Mô tả công việc</option><option>Dữ liệu vận hành</option></select></div>'+sourceMetaFields({})+'<div class="field"><label>Nội dung</label><textarea name="text" required style="min-height:220px" placeholder="Dán nội dung nguồn..."></textarea></div><div class="note"><b>Quy tắc:</b> chỉ nguồn vai trò Căn cứ bên ngoài/Căn cứ nội bộ mới được AI bóc nghĩa vụ. Nguồn bối cảnh, dữ liệu kiểm tra và bằng chứng không được dùng để sinh nghĩa vụ.</div><button class="btn">Lưu nguồn</button></form>');
+document.getElementById("srcTextForm").onsubmit=async function(ev){
+  ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),extractable=sourceRoleExtractable(d.sourceRole);
+  var relevant=Boolean(new FormData(ev.target).get("relevanceVerified")),effective=Boolean(new FormData(ev.target).get("effectivenessVerified"));
+  if(extractable&&(!relevant||!effective)){alert("Nguồn căn cứ phải được xác nhận liên quan và hiệu lực trước khi bóc nghĩa vụ.");return}
+  if(syncMode==="normalized"){
+    try{
+      var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,assessmentId:d.assessmentId,sourceRole:d.sourceRole,
+        relevanceVerified:relevant,effectivenessVerified:effective,relevanceNote:d.relevanceNote||"",
+        sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",
+        issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,supersedesRef:d.supersedesRef||""});
+      document.getElementById("mb")?.remove();
+      if(extractable)await extractTextSource({id:out.record.id,title:d.title},d.text,d.assessmentId);
+      else{await pullRemote();render()}
+    }catch(e){alert("Không tạo được nguồn: "+e.message)}
+    return;
+  }
+  var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"text",status:"draft",createdAt:now(),excerpt:d.text.slice(0,1000)};
+  applySourceMeta(src,d);S.sources.unshift(src);
+  S.assessmentSources.push({id:id("asl"),assessmentId:d.assessmentId,sourceId:src.id,sourceRole:d.sourceRole,extractionEligible:extractable,relevanceStatus:relevant?"verified":"pending",effectivenessStatus:effective?"verified":"pending"});
+  document.getElementById("mb").remove();
+  if(extractable)extractTextSource(src,d.text,d.assessmentId);else{save();render()}
 }
-async function processSourceFile(src,file){
+}
+async function processSourceFile(src,file,assessmentId){
 try{
-  var res=await fetch("/api/source/extract",{method:"POST",headers:{"Content-Type":file.type||"application/octet-stream","X-File-Name":encodeURIComponent(file.name),"X-Source-Id":src.id},body:file});
+  var res=await fetch("/api/source/extract",{method:"POST",headers:{"Content-Type":file.type||"application/octet-stream","X-File-Name":encodeURIComponent(file.name),"X-Source-Id":src.id,"X-Assessment-Id":assessmentId},body:file});
   var data=await res.json();
   if(syncMode==="normalized"){
     if(res.ok&&data.ok){await pullRemote();render();return}
@@ -326,8 +358,34 @@ src.updatedAt=now();save();render();
 }
 function addFileSource(){
 if(!guard("manage_framework"))return;
+if(!S.assessments.length){modal('<h3>Chưa có phạm vi đánh giá</h3><p>Hãy tạo cuộc đánh giá trước khi tiếp nhận nguồn.</p>');return}
 var p=document.getElementById("sourceFile");p.value="";
-p.onchange=function(){var file=p.files&&p.files[0];if(!file)return;modal('<h3>Thông tin nguồn đính kèm</h3><form id="srcFileMeta"><div class="field"><label>Tên nguồn</label><input name="title" required value="'+esc(file.name)+'"></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Tệp đính kèm</option><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option></select></div>'+sourceMetaFields({})+'<button class="btn">Lưu & bóc tách</button></form>');document.getElementById("srcFileMeta").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));if(syncMode==="normalized"){try{var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,supersedesRef:d.supersedesRef||"",fileName:file.name,mimeType:file.type||""});document.getElementById("mb")?.remove();await processSourceFile({id:out.record.id,title:d.title},file)}catch(e){alert("Không tạo được nguồn: "+e.message)}return}var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"file",fileName:file.name,fileType:file.type,status:"draft",createdAt:now()};applySourceMeta(src,d);S.sources.unshift(src);document.getElementById("mb").remove();save();render();processSourceFile(src,file)}};p.click();
+p.onchange=function(){
+  var file=p.files&&p.files[0];if(!file)return;
+  modal('<h3>Thông tin nguồn đính kèm</h3><form id="srcFileMeta">'+assessmentSourceContextFields()+'<div class="field"><label>Tên nguồn</label><input name="title" required value="'+esc(file.name)+'"></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Tệp đính kèm</option><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option><option>JD/Mô tả công việc</option><option>Dữ liệu vận hành</option></select></div>'+sourceMetaFields({})+'<div class="note"><b>Quy tắc:</b> chỉ nguồn căn cứ được trích xuất nghĩa vụ. File dữ liệu kiểm tra/bằng chứng chỉ được lưu để phục vụ kiểm tra, không sinh nghĩa vụ.</div><button class="btn">Lưu nguồn</button></form>');
+  document.getElementById("srcFileMeta").onsubmit=async function(ev){
+    ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),fd=new FormData(ev.target),extractable=sourceRoleExtractable(d.sourceRole);
+    var relevant=Boolean(fd.get("relevanceVerified")),effective=Boolean(fd.get("effectivenessVerified"));
+    if(extractable&&(!relevant||!effective)){alert("Nguồn căn cứ phải được xác nhận liên quan và hiệu lực trước khi bóc nghĩa vụ.");return}
+    if(syncMode==="normalized"){
+      try{
+        var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,assessmentId:d.assessmentId,sourceRole:d.sourceRole,
+          relevanceVerified:relevant,effectivenessVerified:effective,relevanceNote:d.relevanceNote||"",
+          sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",
+          issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,
+          supersedesRef:d.supersedesRef||"",fileName:file.name,mimeType:file.type||""});
+        document.getElementById("mb")?.remove();
+        if(extractable)await processSourceFile({id:out.record.id,title:d.title},file,d.assessmentId);else{await pullRemote();render()}
+      }catch(e){alert("Không tạo được nguồn: "+e.message)}
+      return;
+    }
+    var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"file",fileName:file.name,fileType:file.type,status:"draft",createdAt:now()};
+    applySourceMeta(src,d);S.sources.unshift(src);
+    S.assessmentSources.push({id:id("asl"),assessmentId:d.assessmentId,sourceId:src.id,sourceRole:d.sourceRole,extractionEligible:extractable,relevanceStatus:relevant?"verified":"pending",effectivenessStatus:effective?"verified":"pending"});
+    document.getElementById("mb").remove();
+    if(extractable)processSourceFile(src,file,d.assessmentId);else{save();render()}
+  }
+};p.click();
 }
 function searchRegulations(){
 if(!guard("manage_framework"))return;
