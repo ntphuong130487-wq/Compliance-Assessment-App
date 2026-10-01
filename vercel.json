@@ -79,5 +79,6 @@
       "source": "/api/v1/users",
       "destination": "/api/users?route=directory"
     }
-  ]
+  ],
+  "installCommand": "npm install --ignore-scripts --no-audit --no-fund && node scripts/production-private-blob-smoke.mjs"
 }
