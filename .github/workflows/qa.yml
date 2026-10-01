@@ -140,6 +140,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/006_ai_review_audit.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/007_finding_remediation_model.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/008_action_change_governance.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/009_requirement_assessor_assignment.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/010_assessment_scoped_obligation_v2.sql
       - name: Verify migrated objects
         run: |
           psql -v ON_ERROR_STOP=1 <<'SQL'
