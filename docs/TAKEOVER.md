@@ -10,7 +10,7 @@ Ngày lập: 10/10/2026. Căn cứ: audit danh mục GitHub ngày 10/10/2026 và
 | Hạ tầng | Clerk, Neon (`DATA_MODE=normalized`) và Vercel Blob đã cấu hình | `/api/readiness` |
 | AI extraction, OCR, nguồn tra cứu pháp lý | Chưa cấu hình (`not-configured`) | `/api/readiness`; `api/regulations/search.js` trả 501 |
 | Test | 12/12 bộ pass. Phần lớn là kiểm tra chuỗi ký tự; browser test chạy ở chế độ demo | `tests/qa.mjs`, `tests/browser-server.mjs` |
-| Branch protection `main` | Không bật | GitHub API |
+| Branch protection `main` | Không bật; GitHub Free không hỗ trợ cho repo private (API trả 403) | GitHub API |
 | Visibility repo | **Public** | GitHub |
 
 Lưu ý: Blueprint v0.8 ghi domain production là `compliance-assessment-app-ntphuong130487.vercel.app`. Đây là alias của team và bị Vercel Authentication chặn. Domain thật là `-ashen`.
@@ -32,7 +32,7 @@ Lưu ý: Blueprint v0.8 ghi domain production là `compliance-assessment-app-ntp
 | P | ID | Hạng mục | Tiêu chí nghiệm thu | Thực hiện |
 | --- | --- | --- | --- | --- |
 | P0 | C-01 | Chuyển repo sang private | Repo private; Vercel vẫn deploy | Chủ dự án |
-| P0 | — | Bật branch protection: bắt buộc PR + CI xanh | Push thẳng lên `main` bị từ chối | Chủ dự án |
+| P0 | — | Cổng phát hành không tốn phí: Vercel chỉ deploy production từ branch `production`; merge vào `main` chỉ tạo preview. Phát hành = PR từ `main` sang `production` do chủ dự án merge. (GitHub gói Free không hỗ trợ branch protection cho repo private.) | Merge vào `main` không làm thay đổi production | Chủ dự án (cấu hình Vercel); Agent tạo sẵn branch `production` |
 | P1 | C-02 | Bộ nhắc việc đọc bảng normalized; thêm cron (giới hạn theo gói Vercel cần xác nhận) | Test trên Postgres: số liệu khớp dữ liệu seed | Agent (PR) |
 | P1 | C-03 | Test hành vi cho các control: tự xác minh, thiếu closure evidence, sai org scope, sai trạng thái | Mỗi control có test âm và test dương, chạy trong CI | Agent (PR) |
 | P1 | C-04 | Migration CI chạy chuỗi đầy đủ từ DB trống và kiểm tra idempotence | 3 lần chạy liên tiếp pass | Agent (PR) |
@@ -42,6 +42,6 @@ Lưu ý: Blueprint v0.8 ghi domain production là `compliance-assessment-app-ntp
 
 ## 4. Việc cần chủ dự án quyết định
 
-- Thực hiện C-01 và bật branch protection.
+- Thực hiện C-01 và cấu hình Vercel chỉ deploy production từ branch `production`.
 - Merge PR #4 sau khi C-06 hoàn tất; áp migration 010 lên Neon production.
 - Bật cron cho production (cần xác nhận hạn mức của gói Vercel đang dùng).
