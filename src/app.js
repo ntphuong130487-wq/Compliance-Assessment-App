@@ -16,7 +16,7 @@ var as="as_demo";return{meta:{demo:true,version:"0.1"},org:[{id:"ho",name:"HO"},
 function normalizeState(s){
 s=s||seed();
 if(s.meta&&s.meta.demo&&s.meta.version!=="0.8-demo"&&window.AgriSComplianceDemoState)s=seed();
-s.responses=s.responses||[];s.sources=s.sources||[];s.draftRequirements=s.draftRequirements||[];s.draftReviewEvents=s.draftReviewEvents||[];
+s.responses=s.responses||[];s.sources=s.sources||[];s.assessmentSources=s.assessmentSources||[];s.draftRequirements=s.draftRequirements||[];s.draftReviewEvents=s.draftReviewEvents||[];
 (s.requirements||[]).forEach(function(r){if(!r.status)r.status="effective"});
 (s.assessments||[]).forEach(function(a){a.processRef=a.processRef||"";a.activityRef=a.activityRef||"";a.locationRef=a.locationRef||"";a.periodFrom=a.periodFrom||"";a.periodTo=a.periodTo||""});
 (s.findings||[]).forEach(function(f){if(f.status==="confirmed")f.status="final";if(f.remediationRequired==null)f.remediationRequired=false;f.remediationRequirement=f.remediationRequirement||""});
@@ -266,29 +266,45 @@ function dashboard(){return shell("Điều hành",Screens.dashboard(screenContex
 function sourceStatusLabel(s){
 return({draft:"Nháp",extracted:"Đã bóc tách",pending_approval:"Chờ duyệt",published:"Đã hiệu lực",search_not_configured:"Chưa kết nối nguồn search",needs_ocr:"Cần OCR/AI",error:"Lỗi"})[s]||s;
 }
-function localExtract(text,sourceId){
+function localExtract(text,sourceId,assessmentId){
 var keys=["phải","không được","có trách nhiệm","chịu trách nhiệm","chỉ được","bắt buộc","thực hiện","bảo đảm","đảm bảo","lưu giữ","lưu trữ","báo cáo","phê duyệt","tuân thủ","cấm","đăng ký","thông báo"];
 var parts=String(text||"").replace(/\r/g,"\n").split(/\n+|(?<=[.;!?])\s+/).map(function(x){return x.trim()}).filter(Boolean);
 var cand=parts.filter(function(s){var x=s.toLowerCase();return s.length>=18&&keys.some(function(k){return x.indexOf(k)>=0})});
 if(!cand.length)cand=parts.filter(function(s){return s.length>=40}).slice(0,30);
 return cand.slice(0,60).map(function(s){
   var x=s.toLowerCase(),type=/không được|cấm/.test(x)?"prohibition":/phê duyệt|chấp thuận/.test(x)?"approval":/lưu giữ|lưu trữ|hồ sơ|chứng từ/.test(x)?"record":/báo cáo|thông báo/.test(x)?"reporting":/đăng ký|giấy phép|điều kiện/.test(x)?"condition":/trách nhiệm/.test(x)?"responsibility":"general";
-  return{id:id("dr"),sourceId:sourceId,sourceClause:"",originalText:s,obligation:s,applicability:"",obligationType:type,mandatoryLevel:/nếu|trường hợp|khi /.test(x)?"conditional":/phải|không được|cấm|bắt buộc|chỉ được/.test(x)?"mandatory":"review",expectedEvidence:"Hồ sơ, dữ liệu hệ thống, chứng từ hoặc bằng chứng thực tế phù hợp.",testProcedure:"Đối chiếu bằng chứng thực tế với yêu cầu và phạm vi áp dụng của nghĩa vụ.",reviewStatus:"draft"};
+  var actor=(s.match(/^(.{2,120}?)(?=\s+(?:phải|không được|có trách nhiệm|chịu trách nhiệm|chỉ được|bắt buộc)\b)/i)||[])[1]||"";
+  var action=(s.match(/\b(?:phải|không được|có trách nhiệm|chịu trách nhiệm|chỉ được|bắt buộc)\s+(.+)/i)||[])[1]||"";
+  var clause=(s.match(/\b(?:Điều|Khoản|Mục|Điểm)\s+[\w.\-]+/i)||[])[0]||"";
+  return{id:id("dr"),sourceId:sourceId,originAssessmentId:assessmentId||null,sourceClause:clause,originalText:s,obligation:s,
+    actorText:actor,actionText:action,objectText:"",conditionText:/\bnếu\b|trường hợp|\bkhi\b/i.test(x)?s:"",
+    exceptionText:/ngoại trừ|trừ trường hợp|trừ khi|không áp dụng/i.test(x)?s:"",timingText:"",frequencyText:"",
+    applicability:"",applicableOrgRefs:[],applicableProcessRefs:[],applicableActivityRefs:[],applicableRoleRefs:[],
+    controlPoint:"",controlObjective:"",obligationType:type,mandatoryLevel:/nếu|trường hợp|khi /.test(x)?"conditional":/phải|không được|cấm|bắt buộc|chỉ được/.test(x)?"mandatory":"review",
+    expectedEvidence:"",testProcedure:"",verificationMethod:"",reviewReasons:["Rule fallback — cần người rà soát hoàn thiện trước khi chấp nhận"],reviewStatus:"draft"};
 });
 }
-async function extractTextSource(src,text){
+async function extractTextSource(src,text,assessmentId){
 var drafts=[];
 try{
-  var res=await fetch("/api/obligations/extract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text,sourceId:src.id})});
+  var res=await fetch("/api/obligations/extract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text,sourceId:src.id,assessmentId:assessmentId})});
   var data=await res.json();
   if(res.ok&&data.ok){
     if(syncMode==="normalized"){await pullRemote();render();return}
     drafts=(data.obligations||[]).map(function(d){d.id=id("dr");return d});
+  }else if(syncMode==="normalized"){
+    alert("Không bóc tách được nghĩa vụ: "+(data.error||"EXTRACTION_FAILED"));return;
   }
 }catch(e){if(syncMode==="normalized"){alert("Không bóc tách được nghĩa vụ: "+e.message);return}}
-if(!drafts.length)drafts=localExtract(text,src.id);
+if(!drafts.length)drafts=localExtract(text,src.id,assessmentId);
 S.draftRequirements=S.draftRequirements.concat(drafts);
 src.status="extracted";src.extractedCount=drafts.length;src.updatedAt=now();save();render();
+}
+function sourceRoleLabel(v){return({basis_external:"Căn cứ bên ngoài",basis_internal:"Căn cứ nội bộ",context:"Nguồn bối cảnh",test_data:"Dữ liệu kiểm tra",evidence:"Bằng chứng"})[v]||v||"—"}
+function sourceRoleExtractable(v){return v==="basis_external"||v==="basis_internal"}
+function assessmentSourceContextFields(){
+if(!S.assessments.length)return '<div class="search-warning">Cần tạo cuộc đánh giá và xác định phạm vi trước khi tiếp nhận nguồn.</div>';
+return '<div class="field"><label>Cuộc đánh giá / phạm vi sử dụng nguồn</label><select name="assessmentId" required>'+S.assessments.map(function(a){var u=S.org.find(function(x){return x.id===a.orgId});return '<option value="'+a.id+'">'+esc(a.name)+(u?' · '+esc(u.name):'')+'</option>'}).join("")+'</select></div><div class="field"><label>Vai trò của nguồn</label><select name="sourceRole" required><option value="basis_external">Căn cứ bên ngoài — luật/quy định/tiêu chuẩn/cam kết</option><option value="basis_internal">Căn cứ nội bộ — quy chế/chính sách/quy trình</option><option value="context">Nguồn bối cảnh — ví dụ JD/mô tả vai trò</option><option value="test_data">Dữ liệu kiểm tra — dữ liệu vận hành, danh sách giao dịch...</option><option value="evidence">Bằng chứng — chứng từ/hình ảnh/log dùng để kiểm tra</option></select></div><div class="split"><label class="field"><span>Xác nhận liên quan tới phạm vi</span><span><input type="checkbox" name="relevanceVerified" value="1"> Đã kiểm tra liên quan</span></label><label class="field"><span>Xác nhận hiệu lực/phiên bản</span><span><input type="checkbox" name="effectivenessVerified" value="1"> Đã kiểm tra hiệu lực</span></label></div><div class="field"><label>Ghi chú đánh giá nguồn</label><input name="relevanceNote" placeholder="Căn cứ lựa chọn nguồn, phạm vi áp dụng hoặc lưu ý phiên bản"></div>';
 }
 function sourceMetaFields(s){
 s=s||{};
@@ -299,12 +315,34 @@ function applySourceMeta(src,d){
 }
 function addTextSource(){
 if(!guard("manage_framework"))return;
-modal('<h3>Nhập nội dung nguồn tuân thủ</h3><form id="srcTextForm"><div class="field"><label>Tên nguồn</label><input name="title" required placeholder="Ví dụ: Quy chế/Quy trình/Văn bản..."></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option><option>Hợp đồng/Cam kết</option></select></div>'+sourceMetaFields({})+'<div class="field"><label>Nội dung</label><textarea name="text" required style="min-height:220px" placeholder="Dán nội dung cần bóc tách nghĩa vụ..."></textarea></div><button class="btn">Bóc tách nghĩa vụ</button></form>');
-document.getElementById("srcTextForm").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));if(syncMode==="normalized"){try{var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,supersedesRef:d.supersedesRef||""});document.getElementById("mb")?.remove();var src={id:out.record.id,title:d.title};await extractTextSource(src,d.text)}catch(e){alert("Không tạo được nguồn: "+e.message)}return}var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"text",status:"draft",createdAt:now(),excerpt:d.text.slice(0,1000)};applySourceMeta(src,d);S.sources.unshift(src);document.getElementById("mb").remove();extractTextSource(src,d.text)}
+if(!S.assessments.length){modal('<h3>Chưa có phạm vi đánh giá</h3><p>Hãy tạo cuộc đánh giá và xác định Đơn vị + Quy trình + Hoạt động + Địa điểm trước khi tiếp nhận nguồn.</p>');return}
+modal('<h3>Nhập nguồn cho cuộc đánh giá</h3><form id="srcTextForm">'+assessmentSourceContextFields()+'<div class="field"><label>Tên nguồn</label><input name="title" required placeholder="Ví dụ: Luật, quy chế, chính sách, quy trình..."></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option><option>Hợp đồng/Cam kết</option><option>JD/Mô tả công việc</option><option>Dữ liệu vận hành</option></select></div>'+sourceMetaFields({})+'<div class="field"><label>Nội dung</label><textarea name="text" required style="min-height:220px" placeholder="Dán nội dung nguồn..."></textarea></div><div class="note"><b>Quy tắc:</b> chỉ nguồn vai trò Căn cứ bên ngoài/Căn cứ nội bộ mới được AI bóc nghĩa vụ. Nguồn bối cảnh, dữ liệu kiểm tra và bằng chứng không được dùng để sinh nghĩa vụ.</div><button class="btn">Lưu nguồn</button></form>');
+document.getElementById("srcTextForm").onsubmit=async function(ev){
+  ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),extractable=sourceRoleExtractable(d.sourceRole);
+  var relevant=Boolean(new FormData(ev.target).get("relevanceVerified")),effective=Boolean(new FormData(ev.target).get("effectivenessVerified"));
+  if(extractable&&(!relevant||!effective)){alert("Nguồn căn cứ phải được xác nhận liên quan và hiệu lực trước khi bóc nghĩa vụ.");return}
+  if(syncMode==="normalized"){
+    try{
+      var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,assessmentId:d.assessmentId,sourceRole:d.sourceRole,
+        relevanceVerified:relevant,effectivenessVerified:effective,relevanceNote:d.relevanceNote||"",
+        sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",
+        issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,supersedesRef:d.supersedesRef||""});
+      document.getElementById("mb")?.remove();
+      if(extractable)await extractTextSource({id:out.record.id,title:d.title},d.text,d.assessmentId);
+      else{await pullRemote();render()}
+    }catch(e){alert("Không tạo được nguồn: "+e.message)}
+    return;
+  }
+  var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"text",status:"draft",createdAt:now(),excerpt:d.text.slice(0,1000)};
+  applySourceMeta(src,d);S.sources.unshift(src);
+  S.assessmentSources.push({id:id("asl"),assessmentId:d.assessmentId,sourceId:src.id,sourceRole:d.sourceRole,extractionEligible:extractable,relevanceStatus:relevant?"verified":"pending",effectivenessStatus:effective?"verified":"pending"});
+  document.getElementById("mb").remove();
+  if(extractable)extractTextSource(src,d.text,d.assessmentId);else{save();render()}
 }
-async function processSourceFile(src,file){
+}
+async function processSourceFile(src,file,assessmentId){
 try{
-  var res=await fetch("/api/source/extract",{method:"POST",headers:{"Content-Type":file.type||"application/octet-stream","X-File-Name":encodeURIComponent(file.name),"X-Source-Id":src.id},body:file});
+  var res=await fetch("/api/source/extract",{method:"POST",headers:{"Content-Type":file.type||"application/octet-stream","X-File-Name":encodeURIComponent(file.name),"X-Source-Id":src.id,"X-Assessment-Id":assessmentId},body:file});
   var data=await res.json();
   if(syncMode==="normalized"){
     if(res.ok&&data.ok){await pullRemote();render();return}
@@ -320,15 +358,49 @@ src.updatedAt=now();save();render();
 }
 function addFileSource(){
 if(!guard("manage_framework"))return;
+if(!S.assessments.length){modal('<h3>Chưa có phạm vi đánh giá</h3><p>Hãy tạo cuộc đánh giá trước khi tiếp nhận nguồn.</p>');return}
 var p=document.getElementById("sourceFile");p.value="";
-p.onchange=function(){var file=p.files&&p.files[0];if(!file)return;modal('<h3>Thông tin nguồn đính kèm</h3><form id="srcFileMeta"><div class="field"><label>Tên nguồn</label><input name="title" required value="'+esc(file.name)+'"></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Tệp đính kèm</option><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option></select></div>'+sourceMetaFields({})+'<button class="btn">Lưu & bóc tách</button></form>');document.getElementById("srcFileMeta").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));if(syncMode==="normalized"){try{var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,supersedesRef:d.supersedesRef||"",fileName:file.name,mimeType:file.type||""});document.getElementById("mb")?.remove();await processSourceFile({id:out.record.id,title:d.title},file)}catch(e){alert("Không tạo được nguồn: "+e.message)}return}var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"file",fileName:file.name,fileType:file.type,status:"draft",createdAt:now()};applySourceMeta(src,d);S.sources.unshift(src);document.getElementById("mb").remove();save();render();processSourceFile(src,file)}};p.click();
+p.onchange=function(){
+  var file=p.files&&p.files[0];if(!file)return;
+  modal('<h3>Thông tin nguồn đính kèm</h3><form id="srcFileMeta">'+assessmentSourceContextFields()+'<div class="field"><label>Tên nguồn</label><input name="title" required value="'+esc(file.name)+'"></div><div class="field"><label>Loại nguồn</label><select name="sourceType"><option>Tệp đính kèm</option><option>Quy định nội bộ</option><option>Quy trình</option><option>Quy định nhà nước</option><option>Tiêu chuẩn</option><option>JD/Mô tả công việc</option><option>Dữ liệu vận hành</option></select></div>'+sourceMetaFields({})+'<div class="note"><b>Quy tắc:</b> chỉ nguồn căn cứ được trích xuất nghĩa vụ. File dữ liệu kiểm tra/bằng chứng chỉ được lưu để phục vụ kiểm tra, không sinh nghĩa vụ.</div><button class="btn">Lưu nguồn</button></form>');
+  document.getElementById("srcFileMeta").onsubmit=async function(ev){
+    ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),fd=new FormData(ev.target),extractable=sourceRoleExtractable(d.sourceRole);
+    var relevant=Boolean(fd.get("relevanceVerified")),effective=Boolean(fd.get("effectivenessVerified"));
+    if(extractable&&(!relevant||!effective)){alert("Nguồn căn cứ phải được xác nhận liên quan và hiệu lực trước khi bóc nghĩa vụ.");return}
+    if(syncMode==="normalized"){
+      try{
+        var out=await apiCommand("source.create",{title:d.title,sourceType:d.sourceType,assessmentId:d.assessmentId,sourceRole:d.sourceRole,
+          relevanceVerified:relevant,effectivenessVerified:effective,relevanceNote:d.relevanceNote||"",
+          sourceCode:d.sourceCode||"",issuer:d.issuer||"",version:d.version||"",owner:d.owner||"",
+          issueDate:d.issueDate||null,effectiveFrom:d.effectiveFrom||null,effectiveTo:d.effectiveTo||null,
+          supersedesRef:d.supersedesRef||"",fileName:file.name,mimeType:file.type||""});
+        document.getElementById("mb")?.remove();
+        if(extractable)await processSourceFile({id:out.record.id,title:d.title},file,d.assessmentId);else{await pullRemote();render()}
+      }catch(e){alert("Không tạo được nguồn: "+e.message)}
+      return;
+    }
+    var src={id:id("src"),title:d.title,sourceType:d.sourceType,inputMode:"file",fileName:file.name,fileType:file.type,status:"draft",createdAt:now()};
+    applySourceMeta(src,d);S.sources.unshift(src);
+    S.assessmentSources.push({id:id("asl"),assessmentId:d.assessmentId,sourceId:src.id,sourceRole:d.sourceRole,extractionEligible:extractable,relevanceStatus:relevant?"verified":"pending",effectivenessStatus:effective?"verified":"pending"});
+    document.getElementById("mb").remove();
+    if(extractable)processSourceFile(src,file,d.assessmentId);else{save();render()}
+  }
+};p.click();
 }
 function searchRegulations(){
 if(!guard("manage_framework"))return;
-modal('<h3>Tìm quy định nhà nước</h3><form id="srcSearchForm"><div class="field"><label>Từ khóa</label><input name="query" required placeholder="Ví dụ: an toàn thực phẩm, hóa chất, lao động..."></div><div class="field"><label>Ghi chú phạm vi</label><textarea name="scope" placeholder="Cơ quan ban hành, lĩnh vực, thời kỳ..."></textarea></div><div class="search-warning">Nguồn tìm kiếm pháp lý công khai chưa được cấu hình. Hệ thống sẽ lưu truy vấn và không tạo kết quả giả.</div><button class="btn">Kiểm tra nguồn tìm kiếm</button></form>');
-document.getElementById("srcSearchForm").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),src={id:id("src"),title:"Tìm quy định: "+d.query,sourceType:"Quy định nhà nước",inputMode:"search",query:d.query,scope:d.scope,status:"draft",createdAt:now(),sourceCode:"",issuer:"",issueDate:"",effectiveFrom:"",effectiveTo:"",version:"",supersedesRef:"",owner:""};S.sources.unshift(src);
-  try{var res=await fetch("/api/regulations/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:d.query,scope:d.scope})});var data=await res.json();src.status=res.ok?"extracted":"search_not_configured";src.error=data.message||data.error||""}catch(e){src.status="search_not_configured";src.error="Chưa kết nối nguồn tìm kiếm"}
-  save();document.getElementById("mb").remove();render();
+if(!S.assessments.length){modal('<h3>Chưa có phạm vi đánh giá</h3><p>Hãy tạo cuộc đánh giá trước khi tìm nguồn quy định.</p>');return}
+modal('<h3>Tìm quy định nhà nước</h3><form id="srcSearchForm">'+assessmentSourceContextFields()+'<div class="field"><label>Từ khóa</label><input name="query" required placeholder="Ví dụ: bảo vệ dữ liệu cá nhân, lao động, an toàn thực phẩm..."></div><div class="field"><label>Ghi chú phạm vi tìm kiếm</label><textarea name="scope" placeholder="Cơ quan ban hành, lĩnh vực, thời kỳ..."></textarea></div><div class="search-warning">Kết quả tìm kiếm chỉ là nguồn ứng viên. Không tạo nguồn căn cứ hoặc nghĩa vụ cho tới khi người dùng chọn văn bản, xác nhận liên quan và hiệu lực.</div><button class="btn">Tìm nguồn</button></form><div id="regSearchResult"></div>');
+document.getElementById("srcSearchForm").onsubmit=async function(ev){
+  ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),box=document.getElementById("regSearchResult");
+  box.innerHTML='<div class="small muted">Đang kiểm tra nguồn tìm kiếm...</div>';
+  try{
+    var res=await fetch("/api/regulations/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:d.query,scope:d.scope,assessmentId:d.assessmentId})});
+    var data=await res.json();
+    if(!res.ok){box.innerHTML='<div class="search-warning">'+esc(data.message||data.error||"Nguồn tìm kiếm chưa được cấu hình.")+'</div>';return}
+    var rows=Array.isArray(data.results)?data.results:[];
+    box.innerHTML=rows.length?'<div class="stack">'+rows.map(function(x){return'<div class="source-card"><b>'+esc(x.title||x.name||"Nguồn ứng viên")+'</b><div class="small muted">'+esc(x.issuer||"")+(x.effectiveDate?' · '+esc(x.effectiveDate):"")+'</div><div class="small">Chưa được thêm vào kế hoạch nguồn. Cần xác nhận văn bản trước khi sử dụng.</div></div>'}).join("")+'</div>':'<div class="search-warning">Không có kết quả. Không tạo dữ liệu giả.</div>';
+  }catch(e){box.innerHTML='<div class="search-warning">Chưa kết nối nguồn tìm kiếm công khai. Không tạo dữ liệu giả.</div>'}
 }
 }
 function editSourceMetadata(sid){
@@ -338,13 +410,38 @@ document.getElementById("sourceMetaEdit").onsubmit=async function(ev){ev.prevent
 }
 function provideSourceText(sid){
 var s=S.sources.find(function(x){return x.id===sid});if(!s||!guard("manage_framework"))return;
-modal('<h3>Nhập text thay thế cho file scan</h3><form id="sourceFallbackText"><div class="field"><label>Nội dung đã OCR/đọc thủ công</label><textarea name="text" required style="min-height:240px"></textarea></div><button class="btn">Bóc tách từ nội dung này</button></form>');
-document.getElementById("sourceFallbackText").onsubmit=function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));s.excerpt=d.text.slice(0,1000);s.error="";document.getElementById("mb").remove();extractTextSource(s,d.text)}
+var candidates=(S.assessmentSources||[]).filter(function(l){return l.sourceId===sid&&l.extractionEligible&&l.relevanceStatus==="verified"&&l.effectivenessStatus==="verified"});
+if(!candidates.length){modal('<h3>Chưa thể bóc nghĩa vụ</h3><p>Nguồn này chưa được xác nhận là <b>nguồn căn cứ</b> liên quan và còn hiệu lực trong một cuộc đánh giá.</p>');return}
+var options=candidates.map(function(l){var a=S.assessments.find(function(x){return x.id===l.assessmentId});return'<option value="'+l.assessmentId+'">'+esc(a&&a.name||l.assessmentId)+'</option>'}).join("");
+modal('<h3>Nhập text thay thế cho file scan</h3><form id="sourceFallbackText"><div class="field"><label>Cuộc đánh giá/phạm vi</label><select name="assessmentId">'+options+'</select></div><div class="field"><label>Nội dung đã OCR/đọc thủ công</label><textarea name="text" required style="min-height:240px"></textarea></div><button class="btn">Bóc tách từ nội dung này</button></form>');
+document.getElementById("sourceFallbackText").onsubmit=function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target));s.excerpt=d.text.slice(0,1000);s.error="";document.getElementById("mb").remove();extractTextSource(s,d.text,d.assessmentId)}
 }
 function editDraft(did){
 var d=S.draftRequirements.find(function(x){return x.id===did});if(!d)return;
-modal('<h3>Rà soát nghĩa vụ</h3><form id="draftEdit"><div class="field"><label>Nghĩa vụ tuân thủ</label><textarea name="obligation" required>'+esc(d.obligation)+'</textarea></div><div class="field"><label>Điều/Khoản/Mục nguồn</label><input name="sourceClause" value="'+esc(d.sourceClause||"")+'"></div><div class="field"><label>Đối tượng/phạm vi áp dụng</label><input name="applicability" value="'+esc(d.applicability||"")+'"></div><div class="field"><label>Loại nghĩa vụ</label><input name="obligationType" value="'+esc(d.obligationType||"general")+'"></div><div class="field"><label>Bằng chứng kỳ vọng</label><textarea name="expectedEvidence">'+esc(d.expectedEvidence||"")+'</textarea></div><div class="field"><label>Thủ tục kiểm tra</label><textarea name="testProcedure">'+esc(d.testProcedure||"")+'</textarea></div><button class="btn">Lưu rà soát</button></form>');
-document.getElementById("draftEdit").onsubmit=async function(ev){ev.preventDefault();var x=Object.fromEntries(new FormData(ev.target));if(syncMode==="normalized"){try{await apiCommand("draftRequirement.update",Object.assign({id:did},x));document.getElementById("mb")?.remove();render()}catch(e){alert("Không lưu được nghĩa vụ: "+e.message)}return}Object.assign(d,x);document.getElementById("mb").remove();save();render()}
+function refs(v){return Array.isArray(v)?v.join(", "):""}
+modal('<h3>Rà soát nghĩa vụ tuân thủ</h3><form id="draftEdit">'+
+'<div class="note"><b>Nguyên tắc:</b> một bản ghi = một nghĩa vụ độc lập có thể kiểm tra; giữ nguyên nguồn/điều khoản, điều kiện và ngoại lệ. AI chỉ đề xuất.</div>'+
+'<div class="field"><label>Nghĩa vụ chuẩn hóa</label><textarea name="obligation" required>'+esc(d.obligation||"")+'</textarea></div>'+
+'<div class="split"><div class="field"><label>Điều/Khoản/Mục nguồn</label><input name="sourceClause" required value="'+esc(d.sourceClause||"")+'"></div><div class="field"><label>Loại nghĩa vụ</label><select name="obligationType"><option value="general">Chung</option><option value="prohibition">Cấm/không được</option><option value="approval">Phê duyệt</option><option value="record">Hồ sơ/lưu giữ</option><option value="reporting">Báo cáo/thông báo</option><option value="condition">Điều kiện</option><option value="responsibility">Trách nhiệm</option></select></div></div>'+
+'<div class="split"><div class="field"><label>Chủ thể chịu nghĩa vụ</label><input name="actorText" required value="'+esc(d.actorText||"")+'"></div><div class="field"><label>Hành động phải thực hiện/không được thực hiện</label><textarea name="actionText" required>'+esc(d.actionText||"")+'</textarea></div></div>'+
+'<div class="field"><label>Đối tượng của hành động</label><input name="objectText" value="'+esc(d.objectText||"")+'"></div>'+
+'<div class="split"><div class="field"><label>Điều kiện áp dụng</label><textarea name="conditionText">'+esc(d.conditionText||"")+'</textarea></div><div class="field"><label>Ngoại lệ/miễn trừ</label><textarea name="exceptionText">'+esc(d.exceptionText||"")+'</textarea></div></div>'+
+'<div class="split"><div class="field"><label>Thời hạn/mốc thời gian</label><input name="timingText" value="'+esc(d.timingText||"")+'"></div><div class="field"><label>Tần suất</label><input name="frequencyText" value="'+esc(d.frequencyText||"")+'"></div></div>'+
+'<div class="field"><label>Diễn giải phạm vi áp dụng</label><input name="applicability" value="'+esc(d.applicability||"")+'"></div>'+
+'<div class="split"><div class="field"><label>Đơn vị áp dụng</label><input name="applicableOrgRefs" value="'+esc(refs(d.applicableOrgRefs))+'" placeholder="Phân tách bằng dấu phẩy; để trống = áp dụng chung/chưa chỉ rõ"></div><div class="field"><label>Quy trình áp dụng</label><input name="applicableProcessRefs" value="'+esc(refs(d.applicableProcessRefs))+'"></div><div class="field"><label>Hoạt động áp dụng</label><input name="applicableActivityRefs" value="'+esc(refs(d.applicableActivityRefs))+'"></div><div class="field"><label>Vai trò/chức danh áp dụng</label><input name="applicableRoleRefs" value="'+esc(refs(d.applicableRoleRefs))+'"></div></div>'+
+'<div class="split"><div class="field"><label>Điểm kiểm soát</label><textarea name="controlPoint">'+esc(d.controlPoint||"")+'</textarea></div><div class="field"><label>Mục tiêu kiểm soát</label><textarea name="controlObjective">'+esc(d.controlObjective||"")+'</textarea></div></div>'+
+'<div class="field"><label>Bằng chứng kỳ vọng</label><textarea name="expectedEvidence" required>'+esc(d.expectedEvidence||"")+'</textarea></div>'+
+'<div class="field"><label>Phương pháp/thủ tục kiểm tra</label><textarea name="testProcedure" required>'+esc(d.testProcedure||d.verificationMethod||"")+'</textarea></div>'+
+'<div class="field"><label>Ghi chú rà soát</label><input name="reviewNote" placeholder="Nêu lý do sửa nếu thay đổi nội dung AI đề xuất"></div>'+
+'<button class="btn">Lưu rà soát</button></form>');
+var typeSel=document.querySelector('#draftEdit [name="obligationType"]');if(typeSel)typeSel.value=d.obligationType||"general";
+document.getElementById("draftEdit").onsubmit=async function(ev){
+  ev.preventDefault();var x=Object.fromEntries(new FormData(ev.target));
+  ["applicableOrgRefs","applicableProcessRefs","applicableActivityRefs","applicableRoleRefs"].forEach(function(k){x[k]=String(x[k]||"").split(",").map(function(v){return v.trim()}).filter(Boolean)});
+  x.verificationMethod=x.testProcedure;
+  if(syncMode==="normalized"){try{await apiCommand("draftRequirement.update",Object.assign({id:did},x));document.getElementById("mb")?.remove();render()}catch(e){alert("Không lưu được nghĩa vụ: "+e.message)}return}
+  Object.assign(d,x);document.getElementById("mb").remove();save();render()
+}
 }
 function nextRequirementCode(fw,offset){
 var prefix=String(fw.code||"YC").toUpperCase().replace(/[^A-Z0-9]+/g,"-").replace(/^-|-$/g,"")||"YC";
@@ -354,12 +451,21 @@ return prefix+"-"+String(n).padStart(3,"0");
 }
 function publishDrafts(){
 if(!guard("manage_framework"))return;
-var fwId=document.getElementById("publishFw")&&document.getElementById("publishFw").value,fw=S.frameworks.find(function(x){return x.id===fwId}),ds=S.draftRequirements.filter(function(d){return d.reviewStatus==="accepted"});
-if(!fw||!ds.length){modal('<h3>Chưa thể gửi duyệt</h3><p>Cần có ít nhất một nghĩa vụ đã <b>Chấp nhận</b> và chọn Khung đích.</p>');return}
+var fwEl=document.getElementById("publishFw"),fwId=fwEl&&fwEl.value||"",fw=S.frameworks.find(function(x){return x.id===fwId}),ds=S.draftRequirements.filter(function(d){return d.reviewStatus==="accepted"});
+if(!ds.length){modal('<h3>Chưa thể gửi duyệt</h3><p>Cần có ít nhất một nghĩa vụ đã được người rà soát <b>Chấp nhận</b>.</p>');return}
 if(syncMode==="normalized"){
-  apiCommand("draftRequirement.publishBatch",{frameworkId:fwId,ids:ds.map(function(d){return d.id})}).then(function(){render()}).catch(function(e){alert("Không gửi duyệt được: "+e.message)});return;
+  apiCommand("draftRequirement.publishBatch",{frameworkId:fwId||null,ids:ds.map(function(d){return d.id})}).then(function(){render()}).catch(function(e){alert("Không gửi duyệt được: "+e.message)});return;
 }
-ds.forEach(function(d,i){var req={id:id("r"),frameworkId:fw.id,code:nextRequirementCode(fw,i),title:d.obligation,description:d.originalText||"",assessable:true,test:d.testProcedure||"Cần xác định",expected:d.expectedEvidence||"Cần xác định",sourceId:d.sourceId,sourceClause:d.sourceClause||"",applicability:d.applicability||"",obligationType:d.obligationType||"general",mandatoryLevel:d.mandatoryLevel||"review",status:"pending_approval"};S.requirements.push(req);fw.reqIds.push(req.id);d.reviewStatus="published"});
+ds.forEach(function(d,i){
+  var prefix=fw?fw.code:"REQ",req={id:id("r"),frameworkId:fw&&fw.id||null,code:(fw?nextRequirementCode(fw,i):prefix+"-"+String(S.requirements.length+i+1).padStart(3,"0")),title:d.obligation,description:d.originalText||"",assessable:true,
+    test:d.testProcedure||"",expected:d.expectedEvidence||"",sourceId:d.sourceId,sourceClause:d.sourceClause||"",applicability:d.applicability||"",
+    obligationType:d.obligationType||"general",mandatoryLevel:d.mandatoryLevel||"review",originAssessmentId:d.originAssessmentId||null,
+    actorText:d.actorText||"",actionText:d.actionText||"",objectText:d.objectText||"",conditionText:d.conditionText||"",exceptionText:d.exceptionText||"",
+    timingText:d.timingText||"",frequencyText:d.frequencyText||"",controlPoint:d.controlPoint||"",controlObjective:d.controlObjective||"",
+    applicableOrgRefs:d.applicableOrgRefs||[],applicableProcessRefs:d.applicableProcessRefs||[],applicableActivityRefs:d.applicableActivityRefs||[],applicableRoleRefs:d.applicableRoleRefs||[],
+    status:"pending_approval"};
+  S.requirements.push(req);if(fw)fw.reqIds.push(req.id);d.reviewStatus="published"
+});
 S.sources.forEach(function(s){var own=S.draftRequirements.filter(function(d){return d.sourceId===s.id});if(own.length&&own.every(function(d){return d.reviewStatus==="published"||d.reviewStatus==="rejected"}))s.status="pending_approval"});
 save();render();
 }
@@ -387,15 +493,15 @@ if(!ids.length){modal('<h3>Chưa chọn nghĩa vụ</h3><p>Chọn ít nhất m�
 if(syncMode==="normalized"){apiCommand("draftRequirement.reviewBatch",{ids:ids,status:status}).then(render).catch(function(e){alert("Không cập nhật được nghĩa vụ: "+e.message)});return}
 S.draftRequirements.forEach(function(d){if(ids.indexOf(d.id)>=0)d.reviewStatus=status});save();render();
 }
-function frameworks(){return shell("Nguồn quy định & Khung tuân thủ",Screens.frameworks(screenContext()))}
+function frameworks(){return shell("Nguồn căn cứ & Nghĩa vụ tuân thủ",Screens.frameworks(screenContext()))}
 function requirementApplies(q,ctx){
-if(!q||q.assessable===false||q.status==="rejected"||q.status==="pending_approval")return false;
-var raw=(q.applicability||"").trim().toLowerCase();
-if(!raw)return true;
+if(!q||q.assessable===false||q.status!=="effective")return false;
+function list(v){return Array.isArray(v)?v.map(function(x){return String(x||"").trim().toLowerCase()}).filter(Boolean):[]}
+function match(xs,vals){xs=list(xs);if(!xs.length)return true;vals=vals.map(function(x){return String(x||"").trim().toLowerCase()}).filter(Boolean);return xs.some(function(x){return vals.some(function(y){return x===y||x.indexOf(y)>=0||y.indexOf(x)>=0})})}
 var org=S.org.find(function(x){return x.id===ctx.orgId});
-var hay=[org&&org.name,ctx.processRef,ctx.activityRef,ctx.locationRef].filter(Boolean).join(" ").toLowerCase();
-var tokens=raw.split(/[,;|]/).map(function(x){return x.trim()}).filter(Boolean);
-return tokens.some(function(t){return hay.indexOf(t)>=0});
+return match(q.applicableOrgRefs,[ctx.orgId,org&&org.name])&&
+       match(q.applicableProcessRefs,[ctx.processRef])&&
+       match(q.applicableActivityRefs,[ctx.activityRef]);
 }
 function applicableRequirements(fw,ctx){
 return fw.reqIds.map(function(rid){return S.requirements.find(function(x){return x.id===rid})})
@@ -441,7 +547,27 @@ function settings(){return shell("Cấu hình vận hành",Screens.settings(scre
 function modal(body){document.body.insertAdjacentHTML("beforeend",'<div class="modalbg" id="mb"><div class="modal">'+body+'<div class="row" style="margin-top:14px"><button class="btn alt right" data-act="close">Đóng</button></div></div></div>');bind()}
 function qa(){var e=[];S.ra.forEach(function(r){if(!S.assessments.some(function(a){return a.id===r.assessmentId}))e.push("Bản ghi đánh giá yêu cầu thiếu Cuộc đánh giá");if(!S.requirements.some(function(q){return q.id===r.requirementId}))e.push("Bản ghi đánh giá yêu cầu thiếu Yêu cầu tuân thủ")});S.revisions.forEach(function(r){if(!S.evidence.some(function(e){return e.id===r.evidenceId}))e.push("Phiên bản bằng chứng thiếu Bằng chứng gốc")});S.findings.forEach(function(f){if(!S.ra.some(function(r){return r.id===f.raId}))e.push("Phát hiện thiếu bản ghi đánh giá Yêu cầu tuân thủ")});modal("<h3>QA Check</h3>"+(e.length?'<div class="fail">FAIL · '+e.length+" lỗi</div><ul>"+e.map(function(x){return"<li>"+esc(x)+"</li>"}).join("")+"</ul>":'<div class="pass">PASS · Không phát hiện lỗi toàn vẹn dữ liệu lõi.</div><p class="small muted">Đã kiểm tra liên kết Cuộc đánh giá – Yêu cầu tuân thủ, Bằng chứng – Phiên bản và Phát hiện – Kết quả đánh giá.</p>'))}
 function newfw(){modal('<h3>Tạo khung tuân thủ thủ công</h3><form id="f"><div class="field"><label>Tên khung</label><input name="name" required></div><div class="field"><label>Mã</label><input name="code" required></div><div class="field"><label>Cơ sở/diễn giải nội bộ</label><textarea name="basis" required placeholder="Nêu nguồn hoặc cơ sở hình thành các yêu cầu thủ công"></textarea></div><div class="field"><label>Các điểm phải tuân thủ</label><textarea name="req" placeholder="Mỗi dòng là một yêu cầu" required></textarea></div><button class="btn">Tạo & gửi duyệt</button></form>');document.getElementById("f").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),items=d.req.split("\n").map(function(x){return x.trim()}).filter(Boolean);if(syncMode==="normalized"){try{await apiCommand("framework.createManual",{name:d.name,code:d.code,basis:d.basis,requirements:items});document.getElementById("mb")?.remove();render()}catch(e){alert("Không tạo được khung: "+e.message)}return}var fid=id("fw"),sid=id("src"),src={id:sid,title:"Manual/Internal Interpretation · "+d.name,sourceType:"Manual/Internal Interpretation",inputMode:"manual",status:"pending_approval",createdAt:now(),excerpt:d.basis};S.sources.unshift(src);var rr=items.map(function(t,i){return{id:id("r"),frameworkId:fid,code:(d.code||"FW")+"-"+String(i+1).padStart(2,"0"),title:t,description:d.basis,assessable:true,test:"Cần xác định",expected:"Cần xác định",sourceId:sid,status:"pending_approval"}});S.requirements=S.requirements.concat(rr);S.frameworks.push({id:fid,code:d.code||fid,name:d.name,version:"0.1",status:"pending_approval",reqIds:rr.map(function(x){return x.id})});save();document.getElementById("mb").remove();render()}}
-function newas(){modal('<h3>Tạo đánh giá tuân thủ</h3><form id="f"><div class="field"><label>Tên cuộc đánh giá</label><input name="name" required></div><div class="field"><label>Khung tuân thủ</label><select name="fw">'+S.frameworks.map(function(f){return'<option value="'+f.id+'">'+esc(f.name)+"</option>"}).join("")+'</select></div><div class="field"><label>Đơn vị được đánh giá</label><select name="org">'+S.org.map(function(u){return'<option value="'+u.id+'">'+esc(u.name)+"</option>"}).join("")+'</select></div><div class="split"><div class="field"><label>Quy trình</label><input name="processRef" placeholder="Ví dụ: Mua hàng"></div><div class="field"><label>Hoạt động</label><input name="activityRef" placeholder="Ví dụ: Lựa chọn NCC"></div><div class="field"><label>Địa điểm</label><input name="locationRef" placeholder="Ví dụ: Tây Ninh"></div><div class="field"><label>Mục tiêu</label><input name="objective" placeholder="Mục tiêu đánh giá"></div></div><div class="split"><div class="field"><label>Từ ngày</label><input type="date" name="periodFrom"></div><div class="field"><label>Đến ngày</label><input type="date" name="periodTo"></div><div class="field"><label>Trưởng đoàn</label><input name="leadAssessor"></div><div class="field"><label>Người rà soát</label><input name="reviewer"></div></div><div class="field"><label>Đại diện đơn vị được đánh giá</label><input name="unitRepresentative"></div><div class="note"><b>Quy tắc phạm vi:</b> hệ thống tự xác định Yêu cầu tuân thủ theo phạm vi áp dụng của Khung đối với Đơn vị + Quy trình + Hoạt động + Địa điểm. Yêu cầu tuân thủ không có phạm vi áp dụng cụ thể được hiểu là áp dụng chung.</div><button class="btn">Tạo đánh giá</button></form>');document.getElementById("f").onsubmit=async function(ev){ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),fw=S.frameworks.find(function(x){return x.id===d.fw}),ctx={orgId:d.org,processRef:d.processRef||"",activityRef:d.activityRef||"",locationRef:d.locationRef||""},reqs=applicableRequirements(fw,ctx);if(syncMode==="normalized"){try{var out=await apiCommand("assessment.create",{name:d.name,frameworkId:d.fw,orgId:d.org,objective:d.objective||"",processRef:ctx.processRef,activityRef:ctx.activityRef,locationRef:ctx.locationRef,periodFrom:d.periodFrom||null,periodTo:d.periodTo||null,leadAssessor:d.leadAssessor||"",reviewer:d.reviewer||"",unitRepresentative:d.unitRepresentative||"",requirementIds:reqs.map(function(q){return q.id})});document.getElementById("mb")?.remove();selectedAssessment=out.record.id;selectedRA=null;view="assessments";render()}catch(e){alert("Không tạo được cuộc đánh giá: "+e.message)}return}var aid=id("as"),a={id:aid,name:d.name,frameworkId:d.fw,orgId:d.org,objective:d.objective||"",processRef:ctx.processRef,activityRef:ctx.activityRef,locationRef:ctx.locationRef,periodFrom:d.periodFrom||"",periodTo:d.periodTo||"",leadAssessor:d.leadAssessor||"",reviewer:d.reviewer||"",unitRepresentative:d.unitRepresentative||"",status:"draft",locked:false,scopeRule:"auto_applicability"};S.assessments.push(a);reqs.forEach(function(q){S.ra.push({id:id("ra"),assessmentId:aid,requirementId:q.id,workflow:"to_do",result:"not_assessed",evidenceIds:[]})});S.logs.push({id:id("log"),type:"create_assessment",object:"Assessment",at:now(),note:d.name+" · "+reqs.length+" requirements"});save();document.getElementById("mb").remove();selectedAssessment=aid;selectedRA=null;view="assessments";render()}}
+function newas(){
+modal('<h3>Tạo cuộc đánh giá — bắt đầu từ phạm vi</h3><form id="f"><div class="field"><label>Tên cuộc đánh giá</label><input name="name" required></div>'+
+'<div class="field"><label>Khung tham chiếu sẵn có (không bắt buộc)</label><select name="fw"><option value="">Chưa chọn — sẽ hình thành yêu cầu từ nguồn của cuộc đánh giá</option>'+S.frameworks.map(function(f){return'<option value="'+f.id+'">'+esc(f.name)+"</option>"}).join("")+'</select></div>'+
+'<div class="field"><label>Đơn vị được đánh giá</label><select name="org">'+S.org.map(function(u){return'<option value="'+u.id+'">'+esc(u.name)+"</option>"}).join("")+'</select></div>'+
+'<div class="split"><div class="field"><label>Quy trình</label><input name="processRef" placeholder="Ví dụ: Tuyển dụng"></div><div class="field"><label>Hoạt động</label><input name="activityRef" placeholder="Ví dụ: Sàng lọc hồ sơ, phỏng vấn"></div><div class="field"><label>Địa điểm</label><input name="locationRef"></div><div class="field"><label>Mục tiêu/phạm vi đánh giá</label><input name="objective" placeholder="Mô tả mục tiêu đánh giá"></div></div>'+
+'<div class="split"><div class="field"><label>Từ ngày</label><input type="date" name="periodFrom"></div><div class="field"><label>Đến ngày</label><input type="date" name="periodTo"></div><div class="field"><label>Trưởng đoàn</label><input name="leadAssessor"></div><div class="field"><label>Người rà soát</label><input name="reviewer"></div></div>'+
+'<div class="field"><label>Đại diện đơn vị được đánh giá</label><input name="unitRepresentative"></div>'+
+'<div class="note"><b>Luồng mới:</b> Phạm vi → kế hoạch nguồn → xác nhận nguồn căn cứ → AI bóc nghĩa vụ → human review/duyệt → cập nhật yêu cầu phù hợp → kiểm tra. Không cần có sẵn Yêu cầu tuân thủ để tạo cuộc đánh giá.</div><button class="btn">Tạo cuộc đánh giá</button></form>');
+document.getElementById("f").onsubmit=async function(ev){
+  ev.preventDefault();var d=Object.fromEntries(new FormData(ev.target)),ctx={orgId:d.org,processRef:d.processRef||"",activityRef:d.activityRef||"",locationRef:d.locationRef||""};
+  if(syncMode==="normalized"){
+    try{
+      var out=await apiCommand("assessment.create",{name:d.name,frameworkId:d.fw||null,orgId:d.org,objective:d.objective||"",processRef:ctx.processRef,activityRef:ctx.activityRef,locationRef:ctx.locationRef,periodFrom:d.periodFrom||null,periodTo:d.periodTo||null,leadAssessor:d.leadAssessor||"",reviewer:d.reviewer||"",unitRepresentative:d.unitRepresentative||"",requirementIds:[]});
+      document.getElementById("mb")?.remove();selectedAssessment=out.record.id;selectedRA=null;view="frameworks";render()
+    }catch(e){alert("Không tạo được cuộc đánh giá: "+e.message)}
+    return
+  }
+  var aid=id("as"),a={id:aid,name:d.name,frameworkId:d.fw||null,orgId:d.org,objective:d.objective||"",processRef:ctx.processRef,activityRef:ctx.activityRef,locationRef:ctx.locationRef,periodFrom:d.periodFrom||"",periodTo:d.periodTo||"",leadAssessor:d.leadAssessor||"",reviewer:d.reviewer||"",unitRepresentative:d.unitRepresentative||"",status:"draft",locked:false,scopeRule:"assessment_source_v2"};
+  S.assessments.push(a);S.logs.push({id:id("log"),type:"create_assessment",object:"Assessment",at:now(),note:d.name+" · scope defined; source plan pending"});save();document.getElementById("mb").remove();selectedAssessment=aid;selectedRA=null;view="frameworks";render()
+}
+}
 function assessmentLocalGate(aid){
 var ras=S.ra.filter(function(r){return r.assessmentId===aid});
 var done=ras.filter(function(r){return r.workflow==="done"&&r.result!=="not_assessed"}).length;
@@ -556,6 +682,16 @@ var a=S.actions.find(function(x){return x.id===aid});if(!a||!canUpdateAction(a))
 var p=document.getElementById("actionEvidence");p.value="";
 p.onchange=async function(){try{for(const file of Array.from(p.files)){var stored=await storeEvidenceFile(file,"RemediationAction",aid,"closure_evidence");if(syncMode==="normalized")continue;var ev={id:id("ev"),name:file.name,type:file.type||"file",storage:stored.storage},rv={id:id("rv"),evidenceId:ev.id,version:1,size:file.size,mime:file.type,capturedAt:now(),fileUri:stored.fileUri||null,downloadUrl:stored.downloadUrl||null},ln={id:id("ln"),revId:rv.id,targetId:aid,targetType:"RemediationAction",purpose:"closure_evidence"};S.evidence.push(ev);S.revisions.push(rv);S.links.push(ln);a.closureEvidenceIds=a.closureEvidenceIds||[];a.closureEvidenceIds.push(ev.id)}if(syncMode==="normalized"){await apiCommand("action.submitForVerification",{actionId:aid});render();return}a.status="submitted_for_verification";a.closureSubmittedAt=now();S.logs.push({id:id("log"),type:"submit_action_closure",object:"Hành động",at:now(),note:a.text});save();render()}catch(e){alert("Không nộp được bằng chứng hoàn thành: "+e.message)}};p.click();
 }
+async function refreshAssessmentRequirements(aid){
+try{var out=await apiCommand("assessment.refreshRequirements",{assessmentId:aid});await pullRemote();alert("Đã đồng bộ bộ yêu cầu: thêm "+Number(out.added||0)+", loại "+Number(out.removed||0)+". Eligible: "+(out.eligibility&&out.eligibility.eligible||0));render()}catch(e){alert("Không cập nhật được yêu cầu phù hợp: "+e.message)}
+}
+async function showAssessmentEligibility(aid){
+try{var out=await apiCommand("assessment.eligibility",{assessmentId:aid}),x=out.counts||{};modal('<h3>Eligibility theo phạm vi</h3><div class="table"><table><tbody><tr><th>Tổng ứng viên</th><td>'+Number(x.total||0)+'</td></tr><tr><th>Đã duyệt/hiệu lực</th><td>'+Number(x.approved||0)+'</td></tr><tr><th>Khớp đơn vị</th><td>'+Number(x.unitMatch||0)+'</td></tr><tr><th>Khớp quy trình</th><td>'+Number(x.processMatch||0)+'</td></tr><tr><th>Khớp hoạt động</th><td>'+Number(x.activityMatch||0)+'</td></tr><tr><th>Nguồn còn hiệu lực</th><td>'+Number(x.effective||0)+'</td></tr><tr><th><b>Eligible</b></th><td><b>'+Number(x.eligible||0)+'</b></td></tr></tbody></table></div>')}catch(e){alert("Không tính được eligibility: "+e.message)}
+}
+async function verifyAssessmentSource(sourceId,assessmentId){
+if(!confirm("Xác nhận nguồn này liên quan tới phạm vi cuộc đánh giá và phiên bản/hiệu lực đã được kiểm tra?"))return;
+try{await apiCommand("source.verifyForAssessment",{sourceId:sourceId,assessmentId:assessmentId,relevant:true,effective:true});await pullRemote();render()}catch(e){alert("Không xác nhận được nguồn: "+e.message)}
+}
 function bind(){
 document.querySelectorAll("[data-nav]").forEach(function(b){b.onclick=function(){if(ComplianceAccess.viewAllowed(b.dataset.nav)){view=b.dataset.nav;render()}}});
 document.querySelectorAll("[data-source-mode]").forEach(function(b){b.onclick=function(){sourceMode=b.dataset.sourceMode;render()}});
@@ -566,6 +702,9 @@ document.querySelectorAll("[data-approve-req]").forEach(function(b){b.onclick=fu
 document.querySelectorAll("[data-reject-req]").forEach(function(b){b.onclick=function(){rejectRequirement(b.dataset.rejectReq)}});
 document.querySelectorAll("[data-source-edit]").forEach(function(b){b.onclick=function(){editSourceMetadata(b.dataset.sourceEdit)}});
 document.querySelectorAll("[data-source-text]").forEach(function(b){b.onclick=function(){provideSourceText(b.dataset.sourceText)}});
+document.querySelectorAll("[data-source-verify]").forEach(function(b){b.onclick=function(){verifyAssessmentSource(b.dataset.sourceVerify,b.dataset.assessmentId)}});
+document.querySelectorAll("[data-assessment-refresh]").forEach(function(b){b.onclick=function(){refreshAssessmentRequirements(b.dataset.assessmentRefresh)}});
+document.querySelectorAll("[data-assessment-eligibility]").forEach(function(b){b.onclick=function(){showAssessmentEligibility(b.dataset.assessmentEligibility)}});
 var dsf=document.getElementById("draftSourceFilter");if(dsf)dsf.onchange=function(){draftSourceFilter=dsf.value;render()};
 var aq=document.getElementById("assessmentSearch");if(aq)aq.oninput=function(){assessmentQuery=aq.value;clearTimeout(window.__aq);window.__aq=setTimeout(render,250)};
 var asf=document.getElementById("assessmentStatusFilter");if(asf)asf.onchange=function(){assessmentStatusFilter=asf.value;render()};

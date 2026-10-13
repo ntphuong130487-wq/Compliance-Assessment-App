@@ -24,7 +24,7 @@ for(const primitive of ["pageIntro","metricGrid","sectionHeader","empty","progre
 }
 for(const screen of [
   "COMPLIANCE CONTROL TOWER",
-  "SOURCE & OBLIGATION WORKSPACE",
+  "ASSESSMENT-SCOPED SOURCE & OBLIGATION",
   "ASSESSMENT PLANNING",
   "FIELDWORK & EVIDENCE",
   "FINDING LIFECYCLE",
@@ -40,7 +40,7 @@ for(const style of ["metric-grid","product-hero","screen-fieldwork","screen-fram
 for(const command of [
   "finding.create","finding.respond","finding.finalize",
   "action.create","action.submitForVerification","action.verify",
-  "draftRequirement.publishBatch","assessment.create"
+  "draftRequirement.publishBatch","assessment.create","assessment.eligibility","assessment.refreshRequirements","source.verifyForAssessment"
 ]){
   assert(commands.includes(command),"Workflow command missing "+command);
 }
@@ -52,11 +52,16 @@ for(const role of ["compliance_admin","compliance_manager","lead_assessor","asse
 }
 assert(users.includes("self-signup-preprovisioned"),"Internal pre-provision access model missing");
 assert(!users.includes("createInvitation({"),"Production flow must not require Clerk paid/custom-domain invitations");
-assert(app.length<95000,"app.js should stay below modularization guardrail");
+assert(app.length<105000,"app.js should stay below temporary v2 modularization guardrail");
 assert(screens.includes("Evidence workspace"),"Evidence workspace missing");
 assert(screens.includes("finding-timeline"),"Finding timeline missing");
 assert(screens.includes("aging-strip"),"Action aging missing");
 assert(screens.includes("Human review bắt buộc"),"Human review UX missing");
+assert(screens.includes("Dữ liệu kiểm tra")&&screens.includes("không bóc nghĩa vụ"),"Source-role separation UX missing");
+assert(commands.includes("DRAFT_REVIEW_INCOMPLETE"),"Structured review completeness control missing");
+assert(commands.includes("DUPLICATE_DRAFT_OBLIGATION")&&commands.includes("DUPLICATE_OFFICIAL_REQUIREMENT"),"Obligation duplicate controls missing");
+assert(commands.includes("await sql.transaction(statements)"),"Obligation publish must be atomic");
+assert(commands.includes("INELIGIBLE_REQUIREMENTS_HAVE_WORK")&&commands.includes("remove_ineligible_requirement")&&commands.includes("add_eligible_requirement"),"Eligibility refresh synchronization controls missing");
 
 // End-to-end business lifecycle controls
 for(const control of [

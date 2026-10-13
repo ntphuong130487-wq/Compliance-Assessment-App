@@ -13,7 +13,7 @@ await page.evaluate(()=>{
   if(s.revisions&&s.revisions[0])s.revisions[0].fileUri="https://example.private.blob.vercel-storage.com/compliance-evidence/browser-test.pdf";
   s.draftRequirements=[{
     id:"dr_browser_ai",sourceId:"src_env",sourceClause:"Điều kiểm thử",originalText:"Đơn vị phải lưu giữ hồ sơ kiểm thử.",
-    obligation:"Đơn vị phải lưu giữ hồ sơ kiểm thử.",applicability:"Áp dụng cho đơn vị được đánh giá.",
+    obligation:"Đơn vị phải lưu giữ hồ sơ kiểm thử.",actorText:"Đơn vị",actionText:"lưu giữ hồ sơ kiểm thử",objectText:"hồ sơ kiểm thử",conditionText:"",exceptionText:"",applicability:"Áp dụng cho đơn vị được đánh giá.",applicableOrgRefs:[],applicableProcessRefs:[],applicableActivityRefs:[],applicableRoleRefs:[],
     obligationType:"record",mandatoryLevel:"mandatory",expectedEvidence:"Hồ sơ kiểm thử",testProcedure:"Đối chiếu hồ sơ",
     reviewStatus:"draft",aiGenerated:true,aiConfidence:0.61,aiReviewReasons:["Độ tin cậy thấp"]
   }];
@@ -29,7 +29,7 @@ assert((await page.locator(".side [data-nav]").count())>=8,"Expected 8 desktop n
 
 const screens=[
   ["dashboard","Điều hành tuân thủ","COMPLIANCE CONTROL TOWER"],
-  ["frameworks","Nguồn & Khung tuân thủ","SOURCE & OBLIGATION WORKSPACE"],
+  ["frameworks","Nguồn căn cứ & Nghĩa vụ tuân thủ","ASSESSMENT-SCOPED SOURCE & OBLIGATION"],
   ["assessments","Chương trình đánh giá","ASSESSMENT PLANNING"],
   ["fieldwork","Kiểm tra hiện trường","FIELDWORK & EVIDENCE"],
   ["findings","Phát hiện tuân thủ","FINDING LIFECYCLE"],

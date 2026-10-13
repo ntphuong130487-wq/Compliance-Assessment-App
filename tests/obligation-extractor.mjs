@@ -9,10 +9,13 @@ Trường hợp phát sinh sự cố, đơn vị có trách nhiệm báo cáo tr
 Nội dung mô tả chung không chứa nghĩa vụ cụ thể.
 `;
 
-const rows=extractObligations(text,"src_test");
+const rows=extractObligations(text,"src_test","assessment_test");
 assert(rows.length>=3,"Expected at least 3 obligations");
-assert(rows.every(x=>x.sourceId==="src_test"),"Source traceability missing");
+assert(rows.every(x=>x.sourceId==="src_test"&&x.assessmentId==="assessment_test"),"Assessment/source traceability missing");
 assert(rows.some(x=>x.obligationType==="record"),"Record obligation not classified");
 assert(rows.some(x=>x.obligationType==="prohibition"||x.obligationType==="approval"),"Approval/prohibition not classified");
 assert(rows.every(x=>x.reviewStatus==="draft"),"Draft review state required");
+assert(rows.some(x=>x.actorText),"Actor extraction candidate missing");
+assert(rows.some(x=>x.actionText),"Action extraction candidate missing");
+assert(rows.every(x=>x.expectedEvidence===""&&x.testProcedure===""),"Rule fallback must not invent evidence or test procedures");
 console.log("PASS - obligation extraction and traceability");

@@ -168,8 +168,17 @@ export default async function handler(req,res){
 
     const requirements=await sql`
       SELECT id::text,code,title,description,source_id::text AS "sourceId",source_clause AS "sourceClause",
-             parent_id::text AS "parentId",assessable,mandatory_level AS "mandatoryLevel",
-             test_procedure AS test,expected_evidence AS expected,applicability,obligation_type AS "obligationType",
+             parent_id::text AS "parentId",origin_assessment_id::text AS "originAssessmentId",
+             assessable,mandatory_level AS "mandatoryLevel",test_procedure AS test,
+             expected_evidence AS expected,applicability,obligation_type AS "obligationType",
+             actor_text AS "actorText",action_text AS "actionText",object_text AS "objectText",
+             condition_text AS "conditionText",exception_text AS "exceptionText",timing_text AS "timingText",
+             frequency_text AS "frequencyText",control_point AS "controlPoint",control_objective AS "controlObjective",
+             verification_method AS "verificationMethod",
+             applicable_org_refs AS "applicableOrgRefs",applicable_process_refs AS "applicableProcessRefs",
+             applicable_activity_refs AS "applicableActivityRefs",applicable_role_refs AS "applicableRoleRefs",
+             obligation_key AS "obligationKey",requirement_version AS "requirementVersion",
+             supersedes_requirement_id::text AS "supersedesRequirementId",
              status,approved_by AS "approvedBy",approved_at AS "approvedAt"
       FROM compliance_requirements
       WHERE ${hasPermission(user,"manage_framework")} OR status='effective'
@@ -190,15 +199,35 @@ export default async function handler(req,res){
              supersedes_ref AS "supersedesRef",original_filename AS "fileName",file_uri AS "fileUri",
              mime_type AS "mimeType",created_at AS "createdAt",updated_at AS "updatedAt"
       FROM compliance_sources
-      WHERE ${hasPermission(user,"manage_framework")} OR status IN ('published','effective')
+      WHERE ${hasPermission(user,"manage_framework")} OR status IN ('published','effective','extracted')
       ORDER BY updated_at DESC
     `;
 
+    const assessmentSources=assessmentIds.length
+      ? await sql`
+          SELECT l.id::text,l.assessment_id::text AS "assessmentId",l.source_id::text AS "sourceId",
+                 l.source_role AS "sourceRole",l.extraction_eligible AS "extractionEligible",
+                 l.relevance_status AS "relevanceStatus",l.effectiveness_status AS "effectivenessStatus",
+                 l.relevance_note AS "relevanceNote",l.linked_by AS "linkedBy",l.linked_at AS "linkedAt",
+                 l.verified_by AS "verifiedBy",l.verified_at AS "verifiedAt"
+          FROM assessment_sources l
+          WHERE l.assessment_id::text = ANY(${assessmentIds})
+          ORDER BY l.linked_at DESC
+        `
+      : [];
+
     const draftRequirements=hasPermission(user,"manage_framework")
       ? await sql`
-          SELECT id::text,source_id::text AS "sourceId",source_clause AS "sourceClause",original_text AS "originalText",
+          SELECT id::text,source_id::text AS "sourceId",origin_assessment_id::text AS "originAssessmentId",
+                 source_clause AS "sourceClause",original_text AS "originalText",
                  obligation,applicability,obligation_type AS "obligationType",mandatory_level AS "mandatoryLevel",
-                 expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure",
+                 expected_evidence AS "expectedEvidence",test_procedure AS "testProcedure",verification_method AS "verificationMethod",
+                 actor_text AS "actorText",action_text AS "actionText",object_text AS "objectText",
+                 condition_text AS "conditionText",exception_text AS "exceptionText",timing_text AS "timingText",
+                 frequency_text AS "frequencyText",control_point AS "controlPoint",control_objective AS "controlObjective",
+                 applicable_org_refs AS "applicableOrgRefs",applicable_process_refs AS "applicableProcessRefs",
+                 applicable_activity_refs AS "applicableActivityRefs",applicable_role_refs AS "applicableRoleRefs",
+                 obligation_key AS "obligationKey",duplicate_of::text AS "duplicateOf",
                  review_status AS "reviewStatus",reviewed_by AS "reviewedBy",reviewed_at AS "reviewedAt",
                  ai_generated AS "aiGenerated",ai_confidence AS "aiConfidence",ai_engine AS "aiEngine",
                  ai_schema_version AS "aiSchemaVersion",ai_field_confidence AS "fieldConfidence",
@@ -283,7 +312,7 @@ export default async function handler(req,res){
       ok:true,mode:"normalized",user,
       state:{
         meta:{demo:false,version:"1.0",dataMode:"normalized"},
-        org,frameworks,requirements,sources,draftRequirements,draftReviewEvents,assessments,ra,requirementAssignments,
+        org,frameworks,requirements,sources,assessmentSources,draftRequirements,draftReviewEvents,assessments,ra,requirementAssignments,
         evidence,revisions,links:evidenceLinks,proposals,findings,responses,actions,actionChangeRequests,verifications,
         notifications,notificationSettings:{inApp:true,overdueEscalation:true},logs:[...assessmentLogs,...requirementAssignmentLogs,...actionLogs].sort((a,b)=>new Date(b.at)-new Date(a.at))
       }
